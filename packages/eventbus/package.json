@@ -1,0 +1,17 @@
+{
+  "name": "@connom-ts/eventbus",
+  "version": "0.1.0",
+  "description": "",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "vite build && tsc -p tsconfig.json"
+  },
+  "keywords": [],
+  "type": "module"
+}
