@@ -69,6 +69,9 @@ class EventBus<M extends object> {
             }
         };
 
+        // #NOTE: listenerの引数の型であるMessage<M, K>のKをフィールドが持てないため、
+        // AnyListener型で保持している。K自体は間違いなくmessage.topicの型であるため、
+        // 型アサーションでListener<M, K>[]に変換している。
         // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
         for (const listener of listeners as Listener<M, K>[]) {
             try {

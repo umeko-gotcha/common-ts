@@ -3,7 +3,7 @@ import { EventBus } from "../src/eventbus";
 import type { Message } from "../src/eventbus-type";
 
 /**
- * テスト専用の追加対応表。
+ * テスト専用の対応表
  */
 interface TopicMap {
     "greet": { name: string };

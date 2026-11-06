@@ -2,7 +2,7 @@
  * トピック：データ ＝ 1:1で管理されるアプリメッセージ\
  * イベントの発行者（Message型のデータ生成）と、\
  * イベントの購読者（topicとMessage型のデータを受け取って処理する関数）を\
- * 繋ぐデータ型。任意の型Tを指定のデータで拡張することで静的に実行される。
+ * 繋ぐデータ型。任意の型Tを指定のデータで拡張することで静的に型チェックされる。
  * @template M 任意のオブジェクトを拡張した型。トピックとデータのマッピングを定義する。
  * @template T Mのキーの型。トピック名を指定する。
  */
@@ -15,7 +15,7 @@ type Message<M extends object, T extends keyof M> = {
 
 /**
  * 指定のキーに対応するメッセージを受け取って処理するイベントハンドラー
- * @param message 購読したいトピックに対応したメッセージメッセージ型
+ * @param message 購読したいトピックに対応したメッセージ型
  */
 type Listener<M extends object, T extends keyof M> = (
     message: Message<M, T>,
@@ -46,7 +46,7 @@ type OnError<M extends object> = <K extends keyof M>(
  *      topic1: { value: string };
  *      topic2: { value: number };
  *  }
- *  const eventbus: Publisher = new EventBus<YourMessageMap>();
+ *  const eventbus: Publisher<YourMessageMap> = new EventBus<YourMessageMap>();
  */
 interface Publisher<M extends object> {
     publish<T extends keyof M>(message: Message<M, T>, onError?: OnError<M>): void;
@@ -59,7 +59,7 @@ interface Publisher<M extends object> {
  *      topic1: { value: string };
  *      topic2: { value: number };
  *  }
- *  const eventbus: Subscriber = new EventBus<YourMessageMap>();
+ *  const eventbus: Subscriber<YourMessageMap> = new EventBus<YourMessageMap>();
  */
 interface Subscriber<M extends object> {
     /** トピックに対するリスナーを購読する */
