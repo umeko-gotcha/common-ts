@@ -67,8 +67,6 @@ interface Subscriber<M extends object> {
 }
 
 export type {
-    TopicMap,
-    Topic,
     Message,
     Listener,
     UnSubscriber,
