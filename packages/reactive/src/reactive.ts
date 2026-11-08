@@ -1,3 +1,13 @@
+/** 
+ * 内部で使用するreactive内で共有される自動追従用のオブジェクト
+ */
+type Observer = {
+    /** 実際にsetが実行する、callbackをラップした関数 */
+    run: () => void;
+    /** 依存元が依存先（Set<Observer>：Signalのgetで登録されるもの）を知るためのSet */
+    deps: Set<Set<Observer>>;
+};
+
 
 /**
  * reactiveモジュール内で共有するためのcurrentObserve\
@@ -6,7 +16,7 @@
  * 
  * **※誰が誰に依存しているのかを管理するためのオブジェクト**
  */
-let currentObserver: (() => void) | null = null;
+let currentObserver: Observer | null = null;
 
 /**
  * 状態を保持するためのシグナルクラス
@@ -14,7 +24,7 @@ let currentObserver: (() => void) | null = null;
 class Signal<T> {
 
     #value: T;
-    #subscribers: Set<() => void>
+    #subscribers: Set<Observer>
 
     /** @param value 初期値 */
     constructor(value: T) {
@@ -33,6 +43,9 @@ class Signal<T> {
         // グローバルにコンテキストが実行中なら保持しておく
         if(currentObserver) {
             this.#subscribers.add(currentObserver);
+            // 依存しているObserverが自身の依存先を知るため
+            // 自分に依存しているObserverをグローバルに共有する
+            currentObserver.deps.add(this.#subscribers);
         }
         return this.#value;
     }
@@ -54,11 +67,30 @@ class Signal<T> {
         }
         this.#value = newValue;
         // 内部に保持したコンテキストを実行する
+        // #NOTE: observerのrunの中でcleanUpを行うためコピーしてからrunを実行しないと無限ループになる
+        // 1. setでsubscribersがループされる
+        // 2. runが動きeffectが実行される
+        // 3. cleanUpでsubscribersの中身が削除された後getで再度subscribersに登録される
+        // 4. subscribersが変更されたため反復し再度同じObserverのrunを実行する
         const copy = Array.from(this.#subscribers);
         for(const subscriber of copy) {
-            subscriber();
+            subscriber.run();
         }
     }
+}
+
+
+/**
+ * Observeにある依存関係を解消する
+ * @param observer
+ */
+const cleanUp = (observer: Observer) => {
+    // 依存元から自身の依存を解消する
+    for(const dep of Array.from(observer.deps)) {
+        dep.delete(observer);
+    }
+    // 依存元に渡されていたSetをリセットする
+    observer.deps = new Set();
 }
 
 
@@ -78,9 +110,11 @@ class Signal<T> {
  *  signal.set("test"); // ← 値をセットしたタイミングでeffectに登録したcallbackが実行される
  */
 const createEffect = (callback: (this: void) => void) => {
-
-    /** モジュール内で実行中のcallbackを共有するための関数 */
-    const observer = () => {
+    
+    /** 実際にSignalに実行される関数 */
+    const run = () => {
+        // 自身の依存と自身への依存をそれぞれ解消してから処理を始める
+        cleanUp(observer);
         // すでに実行中の関数があれば一度内部に保持する
         const prevObserver = currentObserver;
         // グローバルに登録する
@@ -93,7 +127,13 @@ const createEffect = (callback: (this: void) => void) => {
         }
     }
 
-    observer();
+    /** モジュール内で実行中のcallbackを共有するためのObserver */
+    const observer: Observer = {
+        run,
+        deps: new Set(),
+    }
+
+    run();
 }
 
 
