@@ -44,26 +44,6 @@ describe("Effectの基本動作テスト", () => {
         // テストの結果
         expect(log).toEqual(["a", "b"]);
     });
-
-    // #NOTE: このテストは条件が細分化されていない
-    // it("effectがネストしていても実行の順番が壊れない", () => {
-
-    //     const a = new Signal("a");
-    //     const b = new Signal("b");
-    //     const log: string[] = [];
-    //     // この時点でlogには"a"と"b"があるはず
-    //     createEffect(() => {
-    //         createEffect(() => log.push(b.get()));
-    //         log.push(a.get());
-    //     });
-    //     // ここではbとaのsignalについて追従されるはず
-    //     b.set("b+");
-    //     // ここではaのsignalについて追加されるはず
-    //     a.set("a+");
-        
-    //     // テストの結果
-    //     expect(log).toEqual(["b", "a", "b+", "b+", "a+"]);
-    // });
 });
 
 
@@ -149,10 +129,48 @@ describe("動的なEffectのテスト", () => {
         vi.restoreAllMocks();
     });
 
-    // #TODO: cleanUpの実装後にテスト
-    // Signalに一度登録されたEffectが残り続けるためそこの対策
-    it.todo("条件によって読むSignalが変わっても新しいSignalのみ読み取られる");
-    it.todo("条件によって読まなくなったSignalの実行では再実行されない");
+
+    it("条件によって読むSignalが変わっても新しいSignalを追跡する", () => {
+
+        const a = new Signal("a");
+        const show = new Signal(false);
+        const log: string[] = [];
+        // この時点でshowはfalseのためlogには"hidden"があるはず
+        createEffect(() => {
+            const value = show.get() ? a.get() : "hidden";
+            log.push(value); 
+        });
+
+        // ここでshowを変更したから"a"が登録されるはず
+        show.set(true);
+        // ここでaを変更したから"a+"が登録されるはず
+        a.set("a+");
+        
+        // テストの結果
+        expect(log).toEqual(["hidden", "a", "a+"]);
+    });
+    
+    // Signalに一度登録されたEffectが残り続けるためその対策
+    it("条件によって読まなくなったSignalの実行では再実行されない", () => {
+
+        const a = new Signal("a");
+        const show = new Signal(true);
+        const log: string[] = [];
+        createEffect(() => {
+            const value = show.get() ? a.get() : "hidden";
+            log.push(value); 
+        });
+
+        // ここでshowを変更したから"hidden"が登録されるはず
+        show.set(false);
+        // showとaにはすでにaの依存関係が解消されており"hidden"は増えないはず
+        // true：showとaにEffectが登録されている
+        // false：showとaからそれぞれEffectが解除されている
+        a.set("a+");
+        
+        // テストの結果
+        expect(log).toEqual(["a", "hidden"]);
+    });
 });
 
 
