@@ -176,9 +176,118 @@ describe("動的なEffectのテスト", () => {
 
 describe("disposeによるEffectの依存性解消", () => {
 
-    // #TODO: Disposeの実装に想定
+    beforeEach(() => {
+        // デフォルトのエラーログがテスト結果の表示を汚さないよう、出力を止めておく
+        // （spyなので「呼ばれたかどうか」は後から確認できる）
+        vi.spyOn(console, "error").mockImplementation(() => { });
+        vi.spyOn(console, "dir").mockImplementation(() => { });
+    });
+
+    afterEach(() => {
+        // spyOnで差し込まれたconsole系のオブジェクトを元のものに戻す
+        vi.restoreAllMocks();
+    });
+
     // Signalが持つEffect自体を完全に削除することができないためその対策（メモリリーク）
-    it.todo("disposeの実行後に正しく依存関係が解消される");
+    it("disposeの実行後に正しく依存関係が解消される", () => {
+
+        const log: string[] = [];
+        // aに依存するEffectを作成する
+        const a = new Signal("a");
+        const dispose = createEffect(() => log.push(a.get()));
+
+        // disposeを実行する前はlogに"a+"が追加される
+        a.set("a+");
+        // disposeを実行すると以降aを変更しても追加されない
+        dispose();
+        a.set("a++");
+        expect(log).toEqual(["a", "a+"]);
+    });
+
+    it("Effectが複数に依存している場合でもdisposeを実行後に依存が解消される", () => {
+
+        const log: string[] = [];
+        const a = new Signal("a");
+        const b = new Signal("b");
+        const dispose = createEffect(() => {
+            log.push(a.get());
+            log.push(b.get());
+        });
+
+        // disposeを実行する前はlogに"a+"と"b"が追加される
+        a.set("a+");
+        // disposeを実行すると以降a、bを変更しても追加されない
+        dispose();
+        a.set("a++");
+        b.set("b+");
+        expect(log).toEqual(["a", "b", "a+", "b"]);
+    });
+
+    it("再実行で後から追加された依存も、disposeで解除される", () => {
+
+        const log: string[] = [];
+        const a = new Signal("a");
+        const show = new Signal(false);
+        const dispose = createEffect(() => {
+            log.push(show.get() ? a.get() : "hidden");
+        });
+
+        // 動的に依存する場合実行後に"a"が追加される
+        show.set(true);
+        // dispose後には変更をしても値が追加されない
+        dispose();
+        a.set("a+");
+        expect(log).toEqual(["hidden", "a"]);
+    });
+
+    it("disposeを複数回呼んでもエラーにならない", () => {
+
+        const log: string[] = [];
+        const a = new Signal("a");
+        const dispose = createEffect(() => log.push(a.get()));
+
+        dispose();
+        dispose();
+        expect(log).toEqual(["a"]);
+    });
+
+    // 依存関係の解消後は動的に追加されても再度依存関係が追加されたりしない
+    it("disposeを呼んでも別の依存関係を解消していない", () => {
+
+        // 一つのSignalに依存する別々のEffectを作成する
+        const a = new Signal("a");
+        const first = vi.fn(() => a.get());
+        const second = vi.fn(() => a.get());
+        const dispose = createEffect(first);
+        createEffect(second);
+
+        // ここでfirstのみDisposeを実行してもsecondの依存関係は解消されていないはず
+        dispose();
+        a.set("a+");
+        // firstは破棄されていて動かないがsecondは動いているはず
+        expect(first).toHaveBeenCalledTimes(1);
+        expect(second).toHaveBeenCalledTimes(2);
+    });
+
+    it("effect内で自身のdisposeを呼んでもエラーにならない", () => {
+
+        const log: string[] = [];
+        const a = new Signal("a");
+        const show = new Signal(false);
+        // 初回はfalseなのでエラーにならない（変数の初期化エラー）
+        const dispose = createEffect(() => {
+            if(show.get()) {
+                dispose()
+            }
+            log.push(a.get());
+        });
+
+        // showをtrueに変更してdisposeした後にaに依存が登録されていないため
+        // "a"は追加されるが以降のaの変更（"a+"）は検知されないはず
+        show.set(true);
+        a.set("a+");
+        expect(log).toEqual(["a", "a"]);
+    });
 });
 
 describe("disposeによるネストしたEffectの依存性解消", () => {
