@@ -12,6 +12,19 @@ type Observer = {
     isDisposed: boolean;
 };
 
+/** 
+ * 自身の所有権を管理するためのオブジェクト\
+ * 1つのEffectごとに一つのOwnerを持つ\
+ * OwnerはDisposeできない子の参照値を管理するため
+ */
+type Owner = {
+    /** 自身のコンテキストの中に埋もれているeffectの所有権 */
+    children: Set<Owner>;
+    /** 自身の依存関係を消去するための関数 */
+    dispose: Dispose;
+};
+
+
 
 /**
  * reactiveモジュール内で共有するためのcurrentObserve\
@@ -21,6 +34,12 @@ type Observer = {
  * **※誰が誰に依存しているのかを管理するためのオブジェクト**
  */
 let currentObserver: Observer | null = null;
+
+
+/**
+ * Effectが自身がネストしているかどうかを確認するためのOwnerオブジェクト
+ */
+let currentOwner: Owner | null = null;
 
 /**
  * 状態を保持するためのシグナルクラス
@@ -97,6 +116,19 @@ const cleanUp = (observer: Observer) => {
     observer.deps = new Set();
 }
 
+/**
+ * 自身が所有している子が所有している所有権の初期化処理を実行する
+ * @param owner 
+ */
+const disposeChildren = (owner: Owner) => {
+    // 子が自身のdispose処理（この関数そのもの）を実行する
+    for(const child of Array.from(owner.children)) {
+        child.dispose();
+    }
+    // 実行し終えたら自信が持つネストした子の一覧を削除する
+    owner.children = new Set();
+}
+
 
 /**
  * 呼び出しているSignalの変更によって自動追従するためのEffectを作成する
@@ -123,6 +155,13 @@ const createEffect = (callback: (this: void) => void): Dispose => {
             return;
         }
 
+        // 実行時点で自身の所有権にある参照を一旦クリアにしてから再度処理を行う
+        disposeChildren(selfOwner);
+        // 自分自身をグローバルに共有しcallback内で子が
+        // 自身にownerを登録できるようにする
+        const prevOwner = currentOwner;
+        currentOwner = selfOwner;
+
         // 自身の依存と自身への依存をそれぞれ解消してから処理を始める
         cleanUp(observer);
         // すでに実行中の関数があれば一度内部に保持する
@@ -133,12 +172,14 @@ const createEffect = (callback: (this: void) => void): Dispose => {
             callback();
         } finally {
             // callback内で例外が発生したかに関わらずグローバルに保持したコンテキストは解消しておく
+            currentOwner = prevOwner;
             currentObserver = prevObserver;
             // もしcallback()内でdisposeを呼ばれている場合は再度cleanUpを実行する
             // #NOTE: callback実行中はcurrentObserverが自身を指したままのため、
             // dispose後に呼ばれたget()で再び依存が登録される。それを外すために再度cleanUpする
             // observer = null にする方針だとここでobserverの型がneverになるため不採用
             if (observer.isDisposed) {
+                disposeChildren(selfOwner);
                 cleanUp(observer);
             }
         }
@@ -151,20 +192,43 @@ const createEffect = (callback: (this: void) => void): Dispose => {
         isDisposed: false,
     }
 
-    // effectを初回実行する
-    run();
-
     /** 自身をメモリから解放するための関数 */
     const dispose = () => {
-        // すでにobserverが解除されていたら処理しない
-        if(observer.isDisposed) {
-            return;
-        }
         // 依存している対象から自身を解除し自身を他から参照できないようにする
         // #NOTE: 実行後はrunとobserverが互いに参照しあっているだけなので参照値は破棄される
-        cleanUp(observer);
-        observer.isDisposed = true;
+        selfOwner.dispose();
     }
+
+    /** dispose時に連鎖して子の参照値を破棄するためのowner */
+    const selfOwner: Owner = {
+        // 自分自身にネストしているeffectを保持すること
+        // 自身のネストしているeffectをcleanUpすること
+        children: new Set(),
+        dispose: () => {
+            // すでにobserverが解除されていたら処理しない
+            if(observer.isDisposed) {
+                return;
+            }
+            // 自身の子と孫の関係を切る
+            disposeChildren(selfOwner);
+            // 親がいれば親から自分自身を削除する
+            // 双方向に登録したものは、どちら側から解除しても、両側から外れるかを見る
+            parentOwner?.children.delete(selfOwner);
+            // 自身の依存関係自体も解消し、誰も管理していないしされていない状態にする
+            cleanUp(observer);
+            observer.isDisposed = true;
+        }
+    }
+
+    // 処理終了後にまだ親がある（自分がネストしている）なら親に自分を登録する
+    // ここまで来た時点でcreateEffectがcreateEffectの内部で動いている場合は
+    // createEffectのrunで自身のOwnerをグローバルに共有する
+    // → callback内にcreateEffectがある場合は下の処理で登録される
+    const parentOwner = currentOwner;
+    parentOwner?.children.add(selfOwner);
+
+    // effectを初回実行する
+    run();
     return dispose;
 }
 

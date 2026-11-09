@@ -292,7 +292,134 @@ describe("disposeによるEffectの依存性解消", () => {
 
 describe("disposeによるネストしたEffectの依存性解消", () => {
 
-    // #TODO: Ownerの実装後に想定
+    beforeEach(() => {
+        // デフォルトのエラーログがテスト結果の表示を汚さないよう、出力を止めておく
+        // （spyなので「呼ばれたかどうか」は後から確認できる）
+        vi.spyOn(console, "error").mockImplementation(() => { });
+        vi.spyOn(console, "dir").mockImplementation(() => { });
+    });
+
+    afterEach(() => {
+        // spyOnで差し込まれたconsole系のオブジェクトを元のものに戻す
+        vi.restoreAllMocks();
+    });
+    
     // Effectがネストしている場合に内側のEffectの参照を切ることができないためその対策
-    it.todo("disposeの実行後にネストしたEffectの依存性が解消される");
+    // #NOTE: 子が破棄されない代わりに親が破棄する
+    it("親をdisposeすると、子も孫も破棄される", () => {
+
+        const log: string[] = [];
+        const a = new Signal("a");
+        const b = new Signal("b");
+        const c = new Signal("c");
+        const dispose = createEffect(() => {
+            createEffect(() => {
+                createEffect(() => log.push(a.get()))
+                log.push(b.get());
+            });
+            log.push(c.get());
+        });
+
+        // dispose実行後にbの値を更新するが"a", "b+", "c"は追加されない
+        dispose();
+        a.set("a+");
+        b.set("b+");
+        c.set("c+");
+        expect(log).toEqual(["a", "b", "c"]);
+    });
+
+    it("親が再実行されると、前回作られた子は破棄される", () => {
+
+        const log: string[] = [];
+        const a = new Signal("a");
+        const b = new Signal("b");
+        // 親を作り再実行させて子がいるかもしれない状態を作る
+        createEffect(() => {
+            createEffect(() => log.push(a.get()));
+            log.push(b.get());
+        });
+        b.set("b+");
+
+        // 一度空にしてから子のSignalを変える
+        log.length = 0;
+        a.set("a+");
+        expect(log).toEqual(["a+"]);
+    });
+
+    it("子だけをdisposeしても、親は動き続ける", () => {
+
+        // 子のチェックをするために子の回数を調べるようにする
+        const a = new Signal("a");
+        const b = new Signal("b");
+        const log: string[] = [];
+        const child = vi.fn(() => b.get());
+        createEffect(() => {
+            const innerDispose = createEffect(child);
+            // 子の参照値をのみを切る
+            innerDispose();
+            log.push(a.get());
+        });
+        // 一度計測をクリアにする
+        child.mockClear();
+
+        // 破棄された子のmockは動かない
+        b.set("b+");
+        expect(child).not.toHaveBeenCalled();
+        // 子はすでに存在しないが親は動き続ける
+        a.set("a+");
+        expect(log).toEqual(["a", "a+"]);
+    });
+
+    it("親と子が同じsignalに依存していても、子は増えない", () => {
+
+        // 子だけを削除して親だけが動いても子が増えていないことを確かめる
+        const a = new Signal("a");
+        const child = vi.fn(() => a.get());
+        createEffect(() => {
+            a.get();
+            createEffect(child);
+        });
+
+        // 子の回数自体を調べるようにするため親だけ動かして子が想定通り動くかどうか確認する
+        child.mockClear();
+        a.set("a+");
+        a.set("a++");
+        expect(child).toHaveBeenCalledTimes(2);
+    });
+
+    it("条件によって子を作らなくなったら、前回の子は破棄される", () => {
+
+        // 動的に依存が変更される場合において参照値が取り残されないか
+        const log: string[] = [];
+        const a = new Signal("a");
+        const show = new Signal(true);
+        createEffect(() => {
+            if(show.get()) {
+                createEffect(() => log.push(a.get()));
+            }
+        });
+
+        // 最初は依存しているけどshowの結果により依存しなくなる場合
+        // aに値をセットしても反応しないはず
+        show.set(false);
+        a.set("a+");
+        expect(log).toEqual(["a"]);
+
+    });
+    it("親の外で作ったeffectは、別のeffectの再実行で破棄されない", () => {
+
+        // finallyの部分に対する確認テスト
+        // 親同士をそれぞれ独立して作りお互いに干渉しないかどうか確認する
+        const trigger = new Signal(0);
+        const b = new Signal("b");
+        const log: string[] = [];
+        createEffect(() => trigger.get());
+        createEffect(() => log.push(b.get()));
+
+        // 親が再実行される
+        trigger.set(1);
+        // 外で作ったeffectは生きているはず
+        b.set("b+");
+        expect(log).toEqual(["b", "b+"]);
+    });
 });
