@@ -423,3 +423,46 @@ describe("disposeによるネストしたEffectの依存性解消", () => {
         expect(log).toEqual(["b", "b+"]);
     });
 });
+
+
+describe("Computedの実装テスト", () => {
+
+    beforeEach(() => {
+        // デフォルトのエラーログがテスト結果の表示を汚さないよう、出力を止めておく
+        // （spyなので「呼ばれたかどうか」は後から確認できる）
+        vi.spyOn(console, "error").mockImplementation(() => { });
+        vi.spyOn(console, "dir").mockImplementation(() => { });
+    });
+
+    afterEach(() => {
+        // spyOnで差し込まれたconsole系のオブジェクトを元のものに戻す
+        vi.restoreAllMocks();
+    });
+
+    describe("値を取得する際の処理", () => {
+        it.todo("Signalが変更されたら再計算を行える");
+        it.todo("Computedが変更されたら再計算を行える");
+        it.todo("2つあるSignalのうちどちらが変更されたら再計算できるようになる");
+        it.todo("dispose後にSignalの変更があっても再計算はされない");
+    });
+
+    describe("Effectに依存される場合の処理", () => {
+        it.todo("Computedが再計算される時だけEffectが実行される");
+        it.todo("2つのSignalに依存するComputedに依存しても1回しかEffectは動かない");
+        it.todo("disposeが呼ばれた後Effectは動かない");
+    });
+
+    describe("ネストしたComputedについての処理", () => {
+        it.todo("Computed内でComputedを生成したら？");
+        it.todo("Computed内でdisposeまで行ったら？");
+        // 以下の二つは例外処理とDepth実装、Computed自体のPromise許容するかどうかで判断
+        it.todo("Computed内でsetが呼ばれたら？");
+        it.todo("Computed内でEffectが呼ばれたら？");
+    });
+
+    describe("多重の依存関係についての処理", () => {
+        it.todo("Computedに依存していても正しく計算される");
+        it.todo("一つのSignalにComputedが依存し、SignalとComputedにEffectが依存している状態でもEffectは一度だけ実行される");
+    });
+
+});
