@@ -1,7 +1,14 @@
 {
-  "name": "@connom-ts/eventbus",
+  "name": "@umeko-gotcha/eventbus",
   "version": "0.1.0",
-  "description": "",
+  "description": "Type-safe event bus",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/umeko-gotcha/common-ts.git",
+    "directory": "packages/eventbus"
+  },
+  "publishConfig": { "access": "public" },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -10,7 +17,8 @@
   },
   "files": ["dist"],
   "scripts": {
-    "build": "vite build && tsc -p tsconfig.json"
+    "build": "vite build && tsc -p tsconfig.json",
+    "prepublishOnly": "npm run build"
   },
   "keywords": [],
   "type": "module"
