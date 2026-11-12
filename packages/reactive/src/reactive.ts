@@ -10,11 +10,13 @@ type Observer = {
     deps: Set<Set<Observer>>;
     /** disposeされたかどうかを管理するフラグ */
     isDisposed: boolean;
+    /** どうスケジュールするかを決めるための関数 */
+    notify: () => void;
 };
 
 /** 
  * 自身の所有権を管理するためのオブジェクト\
- * 1つのEffectごとに一つのOwnerを持つ\
+ * 1つのEffectもしくはComputedごとに一つのOwnerを持つ\
  * OwnerはDisposeできない子の参照値を管理するため
  */
 type Owner = {
@@ -28,7 +30,7 @@ type Owner = {
 
 /**
  * reactiveモジュール内で共有するためのcurrentObserve\
- * createEffect実行時にグローバルに関数を登録する\
+ * createEffect実行時もしくはCompute.get(時にグローバルに関数を登録する\
  * Signalのget時に変数に関数が設定されていたらSignalの内部に登録\
  * 
  * **※誰が誰に依存しているのかを管理するためのオブジェクト**
@@ -37,9 +39,71 @@ let currentObserver: Observer | null = null;
 
 
 /**
- * Effectが自身がネストしているかどうかを確認するためのOwnerオブジェクト
+ * Effect、Computedが自身がネストしているかどうかを確認するためのOwnerオブジェクト
  */
 let currentOwner: Owner | null = null;
+
+
+/**
+ * スケジュールを行う
+ */
+const [schedule, flush] = (() => {
+
+    const scheduleSet: Set<Observer> = new Set();
+    let isSchedule: boolean = false;
+
+    /**
+     * 処理したい対象をスケジュールする
+     * @param observer タスクとして積みたい処理を持つObserver
+     */
+    const schedule = (observer: Observer) => {
+        scheduleSet.add(observer);
+    }
+
+    /**
+     * たまっているタスクを実行する
+     */
+    const flush = () => {
+        // 実行後にscheduleされているものは削除されること
+        // 実行中にscheduleを変更されてもscheduleのループ自体には影響が出ないこと
+        // タスクに積まれていないなら処理しない
+        if(isSchedule) {
+            return;
+        }
+
+        // flushが多重に実行しないように設定しておく
+        isSchedule = true;
+
+        // スケジュール本体でループする
+        // 存在するならループ開始 → 内部でまずスケジュール本体を空にする
+        // スケジュールの処理で再度スケジュールする処理があるなら別のループとして処理
+        // もしかしたら無限ループの可能性あり ← 例外で伝える
+        let count = 0;
+        try {
+            while(scheduleSet.size !== 0) {
+
+                // 例えば100回以上countが回っていたら無限ループ扱いとか
+                if(count > 100) {
+                    throw new Error();
+                }
+                count = count + 1;
+
+                // 実行するスケジュールをコピーしてから本体を消去する
+                const copy = Array.from(scheduleSet);
+                scheduleSet.clear();
+
+                // スケジュールに積まれていたタスクを実行する
+                for (const observer of copy) {
+                    observer.run();
+                }
+            }
+        } finally {
+            isSchedule = false;
+        }
+    }
+
+    return [schedule, flush];
+})();
 
 /**
  * 状態を保持するためのシグナルクラス
@@ -90,15 +154,13 @@ class Signal<T> {
         }
         this.#value = newValue;
         // 内部に保持したコンテキストを実行する
-        // #NOTE: observerのrunの中でcleanUpを行うためコピーしてからrunを実行しないと無限ループになる
-        // 1. setでsubscribersがループされる
-        // 2. runが動きeffectが実行される
-        // 3. cleanUpでsubscribersの中身が削除された後getで再度subscribersに登録される
-        // 4. subscribersが変更されたため反復し再度同じObserverのrunを実行する
-        const copy = Array.from(this.#subscribers);
-        for(const subscriber of copy) {
-            subscriber.run();
+        // notifyの中でcleanUpが行われないため無限ループは起きない
+        for(const subscriber of this.#subscribers) {
+            subscriber.notify();
         }
+        // 自身に依存する全てをスケジュールに登録した後に実行する
+        // #NOTE: batch実装の時はここでflushするかどうかの分岐がある
+        flush();
     }
 }
 
@@ -190,6 +252,7 @@ const createEffect = (callback: (this: void) => void): Dispose => {
         run,
         deps: new Set(),
         isDisposed: false,
+        notify: () => schedule(observer),
     }
 
     /** 自身をメモリから解放するための関数 */
@@ -232,5 +295,160 @@ const createEffect = (callback: (this: void) => void): Dispose => {
     return dispose;
 }
 
+/** 
+ * まだ値がないことを示すsymbol\
+ * Computedの初期値に対して
+ * - 未定値を持たせ遅延実行を実現するか
+ * - コンストラクター関数内で初回の計算をするか
+ * 
+ * で未設定値を選択
+ */
+const UNSET = Symbol("unset");
 
-export { Signal, createEffect }
+/**
+ * あるSignalもしくはComputedを利用して中間値を定義するためのComputedクラス
+ */
+class Computed<T> {
+
+    // 自身より上位の依存は自分の計算要否をコントロールできること
+    //  → 完全に自分でコントロールできるため不要
+    // Compouted自身に依存する対象は自身で管理できること → depsで受け渡す
+    // Computedを実行するかは自身の上位に決めさせないこと → notifyで定義
+
+    static #token = Symbol();
+    #subscribers: Set<Observer>;
+    #callback: () => T;
+    #observer: Observer;
+    #isDirty: boolean;
+    // #value: T;
+    // undefinedにするとcallback自体がundefinedの可能性があるため専用のsymbolで定義
+    #value: T | typeof UNSET = UNSET;
+    #owner: Owner;
+    #parentOwner: Owner | null;
+
+    private constructor(token: symbol, callback: () => T) {
+        // factoryメソッド経由以外では生成できないようにする
+        if(token !== Computed.#token) {
+            throw new TypeError();
+        }
+
+        // 改めてComputedの準備を行う
+        this.#subscribers = new Set();
+        this.#callback = callback;
+        this.#observer = {
+            run: () => {
+                // Computedのrunは実行されないので処理しない
+                // #NOTE: notifyでスケジュールされEffectでrunからgetされるので
+                // 呼ばれることがない
+            },
+            deps: new Set(),
+            isDisposed: false,
+            notify: () => {
+                // Signalがnotify実行時点で変更フラグが立っている
+                // = すでに自分の依存対象が変更に切り替えているので処理の必要がない
+                if(this.#isDirty) {
+                    return;
+                }
+                // Signalによって呼ばれる = 変更がある前提なので
+                // この時点で初回だと必ず通る
+                // 以降重複した呼び出しは上のifで避ける
+                this.#isDirty = true;
+                // 自身の更新前に下流が（getを）実行してしまう可能性があるため
+                // 下流も一度スケジュールし（一箇所に集める）実行タイミングを固定することで
+                // Computed、Effectの重複とglitchを避ける
+                const copy = Array.from(this.#subscribers);
+                for (const subscriber of copy) {
+                    subscriber.notify();
+                }
+            }
+        }
+        // 自身が誰かの子として生成されている場合は自身を追加する
+        this.#owner = {
+            children: new Set(),
+            dispose: () => this.dispose(),
+        }
+        const prevOwner = currentOwner;
+        prevOwner?.children.add(this.#owner);
+        this.#parentOwner = prevOwner;
+
+        this.#isDirty = true;
+    }
+
+    static create<T>(callback: () => T): Computed<T> {
+        return new Computed(Computed.#token, callback);
+    }
+
+    /**
+     * 依存元の値を利用した中間値を取得する
+     * @returns 計算後の値
+     */
+    get (): T {
+
+        // すでに参照値が破棄されているなら以前の値を返す
+        if(this.#observer.isDisposed) {
+
+            // 未定値でない場合はそのまま返す
+            if (this.#value !== UNSET) {
+                return this.#value;
+            }
+            // 未定値のまま = 一度も計算されていない なので
+            // 一度も計算されないまま破棄された場合は、追跡せずに1回だけ計算する
+            const prevObserver = currentObserver;
+            currentObserver = null;
+            try {
+                this.#value = this.#callback();
+                return this.#value;
+            } finally {
+                currentObserver = prevObserver;
+            }
+        }
+
+        // 自分に依存しているものがあれば自身への依存として保持する
+        // その依存を下位に渡しcleanUp時に削除できるようにする
+        if(currentObserver) {
+            this.#subscribers.add(currentObserver);
+            currentObserver.deps.add(this.#subscribers);
+        }
+
+        // ここではTに絞り込まれているため以降は必ずvalueが存在する
+        if (!this.#isDirty && this.#value !== UNSET) {
+            return this.#value;
+        }
+
+        // 自分に依存する対象があれば一旦受け取って自身をグローバルに登録する
+        const prevObserver = currentObserver;
+        currentObserver = this.#observer;
+        try {
+            // 以前に登録されていた依存関係を解除する
+            disposeChildren(this.#owner);
+            cleanUp(this.#observer);
+
+            // 依存はcallbackの中で使用されていたら登録される
+            this.#value = this.#callback();
+            // 計算が正しく行えた場合のみ再計算フラグを下す
+            this.#isDirty = false;
+            return this.#value;
+        } finally {
+            currentObserver = prevObserver;
+        }
+    }
+
+    /**
+     * 自身の依存関係を解消し実行以降は誰からも参照されないようにする\
+     * 破棄後のgetは最後に計算した値を返す。一度も計算されていなければ、追跡せずに1回だけ計算する。
+     */
+    dispose () {
+        if(this.#observer.isDisposed) {
+            return;
+        }
+        cleanUp(this.#observer);
+        disposeChildren(this.#owner);
+        // 親があれば自身を削除してから親の参照値を外す
+        this.#parentOwner?.children.delete(this.#owner);
+        this.#parentOwner = null;
+        this.#observer.isDisposed = true;
+    }
+}
+
+
+export { Signal, createEffect, Computed }
