@@ -1,5 +1,5 @@
 {
-  "name": "@umeko-gotcha/eventbus",
+  "name": "@u-gotcha/eventbus",
   "version": "0.1.0",
   "description": "Type-safe event bus",
   "license": "MIT",
