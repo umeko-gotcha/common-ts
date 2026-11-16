@@ -1,0 +1,41 @@
+# 実際にgithub actionsが実行するための設定ファイル
+
+# Actionsタブに表示される名前
+name: CI
+
+# いつ動かすか
+on:
+  # PRを作った・更新したとき（対象のブランチは問わない）
+  pull_request:
+  push:
+    # develop・mainにpushされたとき
+    branches: [develop, main]
+
+# このワークフローに与える権限（読むだけ）
+permissions:
+  contents: read
+
+# 実行する仕事の一覧
+jobs:
+  # ジョブの名前（自由に付けてよい）
+  test:
+    # 動かす環境（GitHubが用意するLinuxのマシン）
+    runs-on: ubuntu-latest
+
+    # 上から順に実行する手順
+    steps:
+      # リポジトリの中身を取ってくる（これがないと何もファイルがない）
+      - uses: actions/checkout@v4
+
+      # Node.jsを用意する
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          # node_modulesのダウンロードを次回から速くする
+          cache: npm
+
+      # 手元と同じ手順を、速く終わるものから順に
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
