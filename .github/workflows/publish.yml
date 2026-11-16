@@ -1,0 +1,56 @@
+name: Publish
+
+# 1. いつ動かすか（トリガー）
+on:
+  # pushした時
+  push:
+    # 「何か@何か」の形のタグ（eventbus@0.1.0 など）
+    # @をつけたtagがpushされたら自動で動くようにする
+    tags:
+      - "*@*"
+    # 下の指定がない場合は手動で動かすボタンがgit hubにでない
+    # publish.ymlは自動実行される前提なのでタグのない状況で押せないようにした方がいい
+    # workflow_dispatch:     # 画面のボタンから手動で
+
+# 4. 何を許すか（権限）
+permissions:
+  contents: read
+  # npmへの証明書（OIDCトークン）を発行するために必要
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    # 2. どの環境で動かすか
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          # 公開先のnpm
+          registry-url: https://registry.npmjs.org
+
+      # 3. 何をするか（手順）
+      # runで書いたコマンドはgithub上にある仮想ubunchに対しての操作
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+
+      # タグ名「eventbus@0.1.0」から「eventbus」を取り出す
+      - name: パッケージ名を取り出す
+        # 後のステップから結果を参照するための名前
+        id: pkg
+        # GITHUB_REF_NAME%@*　はgithubがあらかじめ入れてくれていたタグ名が入っている
+        # それを取り出してname=eventbusという一行を作る
+        # その内容を$GITHUB_OUTPUTが指すファイル（一時的なもの）に追記する
+        run: echo "name=${GITHUB_REF_NAME%@*}" >> "$GITHUB_OUTPUT"
+
+      # 取り出した名前のパッケージを公開する
+      # outputはechoなどの仮想マシン上でそれぞれが返す戻り値を保持する変数
+      - run: npm publish -w packages/${{ steps.pkg.outputs.name }}
+
+      # 5. 失敗したらどうするか
+      # の観点はgitのrepositoryの設定で保護する
+      # publishは最後に問題ないのがわかったら行う
