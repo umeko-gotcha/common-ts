@@ -439,30 +439,119 @@ describe("Computedの実装テスト", () => {
         vi.restoreAllMocks();
     });
 
-    describe("値を取得する際の処理", () => {
-        it.todo("Signalが変更されたら再計算を行える");
-        it.todo("Computedが変更されたら再計算を行える");
-        it.todo("2つあるSignalのうちどちらが変更されたら再計算できるようになる");
-        it.todo("dispose後にSignalの変更があっても再計算はされない");
+    // イベントで考える。途中でどうなっているか、より結果としてどうなったかを軸に考えるべき
+    // 修正前は挙動に対する観点であり、理想はどうなったかの観点がない
+
+    // describe("値を取得する際の処理", () => {
+    //     it.todo("Signalが変更されたら再計算を行える");
+    //     it.todo("Computedが変更されたら再計算を行える");
+    //     it.todo("2つあるSignalのうちどちらが変更されたら再計算できるようになる");
+    //     it.todo("dispose後にSignalの変更があっても再計算はされない");
+    // });
+
+    // describe("Effectに依存される場合の処理", () => {
+    //     it.todo("Computedが再計算される時だけEffectが実行される");
+    //     it.todo("2つのSignalに依存するComputedに依存しても1回しかEffectは動かない");
+    //     it.todo("disposeが呼ばれた後Effectは動かない");
+    // });
+
+    // describe("ネストしたComputedについての処理", () => {
+    //     it.todo("Computed内でComputedを生成したら？");
+    //     it.todo("Computed内でdisposeまで行ったら？");
+    //     // 以下の二つは例外処理とDepth実装、Computed自体のPromise許容するかどうかで判断
+    //     it.todo("Computed内でsetが呼ばれたら？");
+    //     it.todo("Computed内でEffectが呼ばれたら？");
+    // });
+
+    // describe("多重の依存関係についての処理", () => {
+    //     it.todo("Computedに依存していても正しく計算される");
+    //     it.todo("一つのSignalにComputedが依存し、SignalとComputedにEffectが依存している状態でもEffectは一度だけ実行される");
+    // });
+
+
+    describe("getの値取得に対する観点（正しく計算されるか）", () => {
+
+        // 計算結果が正しいかどうか確認する
+        it.todo("get後にComputedは計算された正しい値が返ってくる")
+
+        // getを二回することでフィールドに計算結果を保持し忘れていないことを確認
+        it.todo("set後のComputedのgetは再計算された正しい値が返ってくる");
+
+        // #NOTE: Computed内ではset、Effectの生成をできないようにする
+        it.todo("ネストしたComputedを作っていても再実行時には呼び出されない");
+
     });
 
-    describe("Effectに依存される場合の処理", () => {
-        it.todo("Computedが再計算される時だけEffectが実行される");
-        it.todo("2つのSignalに依存するComputedに依存しても1回しかEffectは動かない");
-        it.todo("disposeが呼ばれた後Effectは動かない");
+
+    describe("disposeに対する観点（破棄された後の挙動）", () => {
+
+        it.todo("disposeを実行するとSignalのset後にgetをしても古い値が返る");
+
+        it.todo("disposeを2回実行しても壊れない");
+
+        // dispose → 依存元を set → get しても計算関数は呼ばれない
+        it.todo("一度計算されたComputedをdispose後に行うgetは再計算をしない");
+
+        // get時に一度だけ計算される
+        it.todo("作成されて一度もgetされずdisposeするとget時に一度だけ計算される");
+
+        // 誰からも参照されないことを確かめる
+        it.todo("Effectの中で作ったComputedは、親のdisposeで破棄される");
+
+        it.todo("ネストしたComputedのdisposeを呼ぶとアウターのComputedが呼ばれても内部のComputedは呼ばれない");
+
     });
 
-    describe("ネストしたComputedについての処理", () => {
-        it.todo("Computed内でComputedを生成したら？");
-        it.todo("Computed内でdisposeまで行ったら？");
-        // 以下の二つは例外処理とDepth実装、Computed自体のPromise許容するかどうかで判断
-        it.todo("Computed内でsetが呼ばれたら？");
-        it.todo("Computed内でEffectが呼ばれたら？");
+
+    // pull型そのものの実装（呼び出されるまで計算しない）
+    describe("読まれるまで計算しない（遅延実行）", () => {
+
+        // computedにmockを忍ばせてsetが動いても呼ばれないことを確認する
+        it.todo("実際に呼び出されるまで計算が行われない");
+
+        it.todo("呼び出したら計算が行われる");
+
     });
 
-    describe("多重の依存関係についての処理", () => {
-        it.todo("Computedに依存していても正しく計算される");
-        it.todo("一つのSignalにComputedが依存し、SignalとComputedにEffectが依存している状態でもEffectは一度だけ実行される");
+    // 不要な計算を行わないというpull型のキャッシュ実装に対する内容
+    describe("元が変わっていなければ計算し直さない（キャッシュ）", () => {
+
+        // Signalの変更なしでgetした時に計算されないことを確認する
+        it.todo("依存元の値が変更されないなら再計算はされない");
+
+        it.todo("依存元の値が変更されている場合は再計算を行う");
+
+        // 再計算されない観点でテストを行う（影響されない）
+        it.todo("無関係なSignalをsetしても再計算されない");
     });
 
+    describe("元が変わったら自分を読んでいる下流に知らせる（伝染）", () => {
+
+        it.todo("自身に依存する対象がいる状態で依存元が変更されたら自身に依存する対象は呼び出される");
+
+        it.todo("動的にComputedの依存元が変わっても新しく依存する依存元を追従する");
+
+        it.todo("動的に依存しなくなった対象は変更されても追従しない");
+
+        // glitch freeの観点
+        // ダイヤモンドグラフにおいてSignalとSignalを使用するComputedが
+        // 同時に使用される状態だと下流が独立して動いてしまうためその点が
+        // 発生しないことを確認する
+        it.todo("Signalとそれに依存するComputedの両方に依存するEffectがある場合Effectの実行は一度だけ行われる")
+
+        it.todo("ダイヤモンドグラフの時にEffectが見る値は常に新しい値になる");
+
+        // 下流に正しく処理が流れることを確認する
+        it.todo("ComputedがComputedを追従していてもglitchは起きない");
+
+
+        // 再実行時に依存関係がリセットされる（動的な依存関係の整理）
+        it.todo("Effectの中で作ったComputedは、親のEffectの再実行で破棄される");
+
+        // #NOTE: batch時のversionで考える
+        it.todo("再計算の結果が前と同じとき、下流に知らせるか");
+
+    });
+
+    // 「残る状態」「他人のコード」「時間のずれ」
 });
