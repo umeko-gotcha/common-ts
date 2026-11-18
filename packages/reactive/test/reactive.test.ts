@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { Signal, createEffect, Computed } from "../src/reactive";
+import { Signal, createEffect, Computed, ReactiveError } from "../src/reactive";
 
 
 
@@ -467,9 +467,38 @@ describe("Computedの実装テスト", () => {
         });
 
         // #NOTE: Computed内ではset、Effectの生成をできないようにする
-        it.todo("Computedの計算処理でsetを実行するとエラーになる");
+        it("Computedの計算処理でsetを実行するとエラーになる", () => {
 
-        it.todo("Computedの計算処理内でcreateEffectを実行するとエラーになる");
+            const signal = new Signal(1);
+            const computed = Computed.create(() => {
+                signal.set(3);
+                return 1;
+            });
+
+            expect(() => computed.get()).toThrow(ReactiveError);
+            // カウンタが戻っていれば、外でのsetは成功する（依存関係の整理は動いているため）
+            expect(() => signal.set(5)).not.toThrow(ReactiveError);
+        });
+
+        it("Computedの計算処理内でcreateEffectを実行するとエラーになる", () => {
+
+            // Computedの中でcreateEffectを実行するとエラーになる
+            const signal = new Signal(1);
+            // effectが呼ばれていないことを確かめるためのmock
+            const effectFn = vi.fn(() => signal.get());
+            const computed = Computed.create(() => {
+                createEffect(effectFn);
+                return 1;
+            });
+
+            expect(() => computed.get()).toThrow(ReactiveError);
+            // Effectが作られていない（初回実行もされていない）
+            expect(effectFn).not.toHaveBeenCalled();
+            // カウンタが戻っていれば、外でのsetは成功する
+            expect(() => signal.set(5)).not.toThrow(ReactiveError);
+            // set後も呼ばれていない（購読もされていない）
+            expect(effectFn).not.toHaveBeenCalled();
+        });
     });
 
 
@@ -497,7 +526,7 @@ describe("Computedの実装テスト", () => {
             
             // disposeを2回実行しても問題なく処理が行われる（べき等かどうか）
             computed.dispose();
-            expect(() => computed.dispose()).not.toThrow();
+            expect(() => computed.dispose()).not.toThrow(ReactiveError);
         });
 
         it("一度計算されたComputedをdispose後に行うgetは再計算をしない", () => {

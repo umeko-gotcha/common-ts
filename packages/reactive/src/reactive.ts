@@ -27,6 +27,18 @@ type Owner = {
 };
 
 
+/**
+ * Reactive内で投げられる専用のエラー
+ */
+class ReactiveError extends Error {
+
+    constructor(message: string) {
+        super(message);
+        this.name = "ReactiveError";
+    }
+
+}
+
 
 /**
  * reactiveモジュール内で共有するためのcurrentObserve\
@@ -84,7 +96,7 @@ const [schedule, flush] = (() => {
 
                 // 例えば100回以上countが回っていたら無限ループ扱いとか
                 if(count > 100) {
-                    throw new Error();
+                    throw new ReactiveError("無限ループの可能性があります。");
                 }
                 count = count + 1;
 
@@ -98,12 +110,50 @@ const [schedule, flush] = (() => {
                 }
             }
         } finally {
+            // 途中で例外が発生しループが強制終了した場合はタスクを空にする
+            // （正しく動いていたらループは空になっているはずだから）
+            scheduleSet.clear();
             isSchedule = false;
+
+            // #TODO: ループ中に例外が発生した際、残りのスケジュールが処理されずに破棄されることで
+            // 本来そのスケジュールが実行されるから解消される依存関係が正しく実行されなくなる
+            // 一つ目のEffectが例外を投げる
+            // →次のEffectが動かない
+            // →Computedに依存している場合isDirtyがtrueにならないまま残る
+            // →そのことで二度とそのComputedのisDirtyが立たずにEffectも呼ばれない
+            // なので、例外が発生したとしても依存関係や親子関係が解消されるようにする必要がある
+            // notifyでされる処理は全て行なった上で処理する
         }
     }
 
     return [schedule, flush];
 })();
+
+
+/** 現在Computedが動いているかをカウントするためのカウンター管理用クラス */
+class ComputedDepth {
+    
+    #count: number = 0;
+
+    /** Computedがカウントを増やすためのメソッド */
+    increment(): void {
+        this.#count++;
+    }
+
+    /** Computedがカウントを減らすためのメソッド */
+    decrement(): void {
+        this.#count--;
+    }
+
+    /** 現在Computedの計算中かどうか */
+    isComputing(): boolean {
+        return this.#count !== 0;
+    }
+}
+
+/** 現時点でComputedが計算中かを管理するためのカウンタ管理用変数 */
+const computedDepth = new ComputedDepth();
+
 
 /**
  * 状態を保持するためのシグナルクラス
@@ -149,6 +199,12 @@ class Signal<T> {
      * });
      */
     set (this: Signal<T>, newValue: T) {
+
+        // もしComputedのcallback内でsetされていたらエラーにする
+        if(computedDepth.isComputing()) {
+            throw new ReactiveError("Computedの計算処理中にSignalのsetを実行することはできません。");
+        }
+
         if (Object.is(newValue, this.#value)) {
             return;
         }
@@ -209,6 +265,11 @@ const disposeChildren = (owner: Owner) => {
  *  signal.set("test"); // ← 値をセットしたタイミングでeffectに登録したcallbackが実行される
  */
 const createEffect = (callback: (this: void) => void): Dispose => {
+
+    // Computedの計算中にEffectの生成はできないようにする
+    if(computedDepth.isComputing()) {
+        throw new ReactiveError("Computedの計算処理中にcreateEffectを実行することはできません。")
+    }
     
     /** 実際にSignalに実行される関数 */
     const run = () => {
@@ -391,6 +452,10 @@ class Computed<T> {
             if (this.#value !== UNSET) {
                 return this.#value;
             }
+
+            // Computedが計算中であることを伝えるためのカウント
+            computedDepth.increment();
+
             // 未定値のまま = 一度も計算されていない なので
             // 一度も計算されないまま破棄された場合は、追跡せずに1回だけ計算する
             const prevObserver = currentObserver;
@@ -400,6 +465,9 @@ class Computed<T> {
                 return this.#value;
             } finally {
                 currentObserver = prevObserver;
+
+                // 計算が完了したらカウントを戻す
+                computedDepth.decrement();
             }
         }
 
@@ -414,6 +482,9 @@ class Computed<T> {
         if (!this.#isDirty && this.#value !== UNSET) {
             return this.#value;
         }
+
+        // Computedが計算中であることを伝えるためのカウント
+        computedDepth.increment();
 
         // 自分に依存する対象があれば一旦受け取って自身をグローバルに登録する
         const prevObserver = currentObserver;
@@ -430,6 +501,9 @@ class Computed<T> {
             return this.#value;
         } finally {
             currentObserver = prevObserver;
+
+            // 計算が完了したらカウントを戻す
+            computedDepth.decrement();
         }
     }
 
@@ -451,4 +525,4 @@ class Computed<T> {
 }
 
 
-export { Signal, createEffect, Computed }
+export { Signal, createEffect, Computed, ReactiveError }
