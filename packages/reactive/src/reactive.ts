@@ -111,12 +111,12 @@ class ComputedDepth {
     
     #count: number = 0;
 
-    /** Coumputedがカウントを増やすためのメソッド */
+    /** Computedがカウントを増やすためのメソッド */
     increment(): void {
         this.#count++;
     }
 
-    /** Coumputedがカウントを減らすためのメソッド */
+    /** Computedがカウントを減らすためのメソッド */
     decrement(): void {
         this.#count--;
     }
