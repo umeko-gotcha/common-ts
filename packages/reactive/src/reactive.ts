@@ -315,6 +315,11 @@ const createEffect = (callback: (this: void) => void): Dispose => {
         }
     }
 
+    // Computedの計算中にEffectの生成はできないようにする
+    if(computedDepth.isComputing()) {
+        throw new Error();
+    }
+
     // 処理終了後にまだ親がある（自分がネストしている）なら親に自分を登録する
     // ここまで来た時点でcreateEffectがcreateEffectの内部で動いている場合は
     // createEffectのrunで自身のOwnerをグローバルに共有する

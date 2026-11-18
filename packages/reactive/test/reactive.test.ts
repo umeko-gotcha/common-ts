@@ -480,7 +480,25 @@ describe("Computedの実装テスト", () => {
             expect(() => signal.set(5)).not.toThrow();
         });
 
-        it.todo("Computedの計算処理内でcreateEffectを実行するとエラーになる");
+        it("Computedの計算処理内でcreateEffectを実行するとエラーになる", () => {
+
+            // Computedの中でcreateEffectを実行するとエラーになる
+            const signal = new Signal(1);
+            // effectが呼ばれていないことを確かめるためのmock
+            const effectFn = vi.fn(() => signal.get());
+            const computed = Computed.create(() => {
+                createEffect(effectFn);
+                return 1;
+            });
+
+            expect(() => computed.get()).toThrow();
+            // Effectが作られていない（初回実行もされていない）
+            expect(effectFn).not.toHaveBeenCalled();
+            // カウンタが戻っていれば、外でのsetは成功する
+            expect(() => signal.set(5)).not.toThrow();
+            // set後も呼ばれていない（購読もされていない）
+            expect(effectFn).not.toHaveBeenCalled();
+        });
     });
 
 
