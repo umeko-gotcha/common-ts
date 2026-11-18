@@ -27,6 +27,18 @@ type Owner = {
 };
 
 
+/**
+ * Reactive内で投げられる専用のエラー
+ */
+class ReactiveError extends Error {
+
+    constructor(message: string) {
+        super(message);
+        this.name = "ReactiveError";
+    }
+
+}
+
 
 /**
  * reactiveモジュール内で共有するためのcurrentObserve\
@@ -84,7 +96,7 @@ const [schedule, flush] = (() => {
 
                 // 例えば100回以上countが回っていたら無限ループ扱いとか
                 if(count > 100) {
-                    throw new Error();
+                    throw new ReactiveError("無限ループの可能性があります。");
                 }
                 count = count + 1;
 
@@ -178,7 +190,7 @@ class Signal<T> {
 
         // もしComputedのcallback内でsetされていたらエラーにする
         if(computedDepth.isComputing()) {
-            throw new Error();
+            throw new ReactiveError("Computedの計算処理中にSignalのsetを実行することはできません。");
         }
 
         if (Object.is(newValue, this.#value)) {
@@ -244,7 +256,7 @@ const createEffect = (callback: (this: void) => void): Dispose => {
 
     // Computedの計算中にEffectの生成はできないようにする
     if(computedDepth.isComputing()) {
-        throw new Error();
+        throw new ReactiveError("Computedの計算処理中にcreateEffectを実行することはできません。")
     }
     
     /** 実際にSignalに実行される関数 */
@@ -501,4 +513,4 @@ class Computed<T> {
 }
 
 
-export { Signal, createEffect, Computed }
+export { Signal, createEffect, Computed, ReactiveError }
