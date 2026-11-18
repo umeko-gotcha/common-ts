@@ -241,6 +241,11 @@ const disposeChildren = (owner: Owner) => {
  *  signal.set("test"); // ← 値をセットしたタイミングでeffectに登録したcallbackが実行される
  */
 const createEffect = (callback: (this: void) => void): Dispose => {
+
+    // Computedの計算中にEffectの生成はできないようにする
+    if(computedDepth.isComputing()) {
+        throw new Error();
+    }
     
     /** 実際にSignalに実行される関数 */
     const run = () => {
@@ -313,11 +318,6 @@ const createEffect = (callback: (this: void) => void): Dispose => {
             cleanUp(observer);
             observer.isDisposed = true;
         }
-    }
-
-    // Computedの計算中にEffectの生成はできないようにする
-    if(computedDepth.isComputing()) {
-        throw new Error();
     }
 
     // 処理終了後にまだ親がある（自分がネストしている）なら親に自分を登録する
