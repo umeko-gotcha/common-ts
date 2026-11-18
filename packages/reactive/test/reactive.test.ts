@@ -467,7 +467,18 @@ describe("Computedの実装テスト", () => {
         });
 
         // #NOTE: Computed内ではset、Effectの生成をできないようにする
-        it.todo("Computedの計算処理でsetを実行するとエラーになる");
+        it("Computedの計算処理でsetを実行するとエラーになる", () => {
+
+            const signal = new Signal(1);
+            const computed = Computed.create(() => {
+                signal.set(3);
+                return 1;
+            });
+
+            expect(() => computed.get()).toThrow();
+            // カウンタが戻っていれば、外でのsetは成功する（依存関係の整理は動いているため）
+            expect(() => signal.set(5)).not.toThrow();
+        });
 
         it.todo("Computedの計算処理内でcreateEffectを実行するとエラーになる");
     });

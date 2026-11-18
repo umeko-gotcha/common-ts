@@ -105,6 +105,32 @@ const [schedule, flush] = (() => {
     return [schedule, flush];
 })();
 
+
+/** 現在Computedが動いているかをカウントするためのカウンター管理用クラス */
+class ComputedDepth {
+    
+    #count: number = 0;
+
+    /** Coumputedがカウントを増やすためのメソッド */
+    increment(): void {
+        this.#count++;
+    }
+
+    /** Coumputedがカウントを減らすためのメソッド */
+    decrement(): void {
+        this.#count--;
+    }
+
+    /** 現在Computedの計算中かどうか */
+    isComputing(): boolean {
+        return this.#count !== 0;
+    }
+}
+
+/** 現時点でComputedが計算中かを管理するためのカウンタ管理用変数 */
+const computedDepth = new ComputedDepth();
+
+
 /**
  * 状態を保持するためのシグナルクラス
  */
@@ -149,6 +175,12 @@ class Signal<T> {
      * });
      */
     set (this: Signal<T>, newValue: T) {
+
+        // もしComputedのcallback内でsetされていたらエラーにする
+        if(computedDepth.isComputing()) {
+            throw new Error();
+        }
+
         if (Object.is(newValue, this.#value)) {
             return;
         }
@@ -391,6 +423,10 @@ class Computed<T> {
             if (this.#value !== UNSET) {
                 return this.#value;
             }
+
+            // Computedが計算中であることを伝えるためのカウント
+            computedDepth.increment();
+
             // 未定値のまま = 一度も計算されていない なので
             // 一度も計算されないまま破棄された場合は、追跡せずに1回だけ計算する
             const prevObserver = currentObserver;
@@ -400,6 +436,9 @@ class Computed<T> {
                 return this.#value;
             } finally {
                 currentObserver = prevObserver;
+
+                // 計算が完了したらカウントを戻す
+                computedDepth.decrement();
             }
         }
 
@@ -414,6 +453,9 @@ class Computed<T> {
         if (!this.#isDirty && this.#value !== UNSET) {
             return this.#value;
         }
+
+        // Computedが計算中であることを伝えるためのカウント
+        computedDepth.increment();
 
         // 自分に依存する対象があれば一旦受け取って自身をグローバルに登録する
         const prevObserver = currentObserver;
@@ -430,6 +472,9 @@ class Computed<T> {
             return this.#value;
         } finally {
             currentObserver = prevObserver;
+
+            // 計算が完了したらカウントを戻す
+            computedDepth.decrement();
         }
     }
 
