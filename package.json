@@ -5,6 +5,8 @@
   "scripts": {
     "build": "npm run build --workspaces",
     "test": "vitest run",
+    "evenbbus_test": "vitest run packages/eventbus",
+    "reactive_test": "vitest run packages/reactive",
     "lint": "eslint ."
   },
   "repository": {
