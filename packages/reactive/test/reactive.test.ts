@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { Signal, createEffect } from "../src/reactive";
+import { Signal, createEffect, Computed } from "../src/reactive";
 
 
 
@@ -439,66 +439,148 @@ describe("Computedの実装テスト", () => {
         vi.restoreAllMocks();
     });
 
-    // イベントで考える。途中でどうなっているか、より結果としてどうなったかを軸に考えるべき
-    // 修正前は挙動に対する観点であり、理想はどうなったかの観点がない
-
-    // describe("値を取得する際の処理", () => {
-    //     it.todo("Signalが変更されたら再計算を行える");
-    //     it.todo("Computedが変更されたら再計算を行える");
-    //     it.todo("2つあるSignalのうちどちらが変更されたら再計算できるようになる");
-    //     it.todo("dispose後にSignalの変更があっても再計算はされない");
-    // });
-
-    // describe("Effectに依存される場合の処理", () => {
-    //     it.todo("Computedが再計算される時だけEffectが実行される");
-    //     it.todo("2つのSignalに依存するComputedに依存しても1回しかEffectは動かない");
-    //     it.todo("disposeが呼ばれた後Effectは動かない");
-    // });
-
-    // describe("ネストしたComputedについての処理", () => {
-    //     it.todo("Computed内でComputedを生成したら？");
-    //     it.todo("Computed内でdisposeまで行ったら？");
-    //     // 以下の二つは例外処理とDepth実装、Computed自体のPromise許容するかどうかで判断
-    //     it.todo("Computed内でsetが呼ばれたら？");
-    //     it.todo("Computed内でEffectが呼ばれたら？");
-    // });
-
-    // describe("多重の依存関係についての処理", () => {
-    //     it.todo("Computedに依存していても正しく計算される");
-    //     it.todo("一つのSignalにComputedが依存し、SignalとComputedにEffectが依存している状態でもEffectは一度だけ実行される");
-    // });
-
-
     describe("getの値取得に対する観点（正しく計算されるか）", () => {
 
-        // 計算結果が正しいかどうか確認する
-        it.todo("get後にComputedは計算された正しい値が返ってくる")
+        it("get後にComputedは計算された正しい値が返ってくる", () => {
 
-        // getを二回することでフィールドに計算結果を保持し忘れていないことを確認
-        it.todo("set後のComputedのgetは再計算された正しい値が返ってくる");
+            // 計算結果が正しいかどうか確認する
+            const logs = [];
+            const aSignal = new Signal(1);
+            const bSignal = new Signal(2);
+            const computed = Computed.create(() => aSignal.get() + bSignal.get());
+            
+            // 初回とset後の値とで比較する
+            logs.push(computed.get());
+            aSignal.set(3);
+            logs.push(computed.get());
+            expect(logs).toEqual([3, 5]);
+        });
+
+        it("set後のComputedのgetは再計算された正しい値が返ってくる", () => {
+
+            const logs = [];
+            const aSignal = new Signal(1);
+            const bSignal = new Signal(2);
+            const computed = Computed.create(() => aSignal.get() + bSignal.get());
+            
+            // getを二回することでフィールドに計算結果を保持し忘れていないことを確認
+            aSignal.set(3);
+            logs.push(computed.get());
+            logs.push(computed.get());
+            expect(logs).toEqual([5, 5]);
+        });
+
+        it("ネストしたComputedを作っていても再実行時には呼び出されない", () => {
+
+            // ネストしたComputedが再実行時に呼び出されないことを確認する
+            const aSignal = new Signal(1);
+            const mock = vi.fn(() => aSignal.get());
+            const innerComputed = Computed.create(mock);
+            const computed = Computed.create(() => innerComputed.get());
+            
+            // 再実行するが変化していないのならinnerComputedは呼び出されない
+            computed.get();
+            computed.get();
+            expect(mock).toHaveBeenCalledOnce();
+        });
 
         // #NOTE: Computed内ではset、Effectの生成をできないようにする
-        it.todo("ネストしたComputedを作っていても再実行時には呼び出されない");
+        it.todo("Computedの計算処理でsetを実行するとエラーになる");
 
+        it.todo("Computedの計算処理内でcreateEffectを実行するとエラーになる");
     });
 
 
     describe("disposeに対する観点（破棄された後の挙動）", () => {
 
-        it.todo("disposeを実行するとSignalのset後にgetをしても古い値が返る");
+        it("disposeを実行するとSignalのset後にgetをしても古い値が返る", () => {
 
-        it.todo("disposeを2回実行しても壊れない");
+            const logs = [];
+            const aSignal = new Signal(1);
+            const computed = Computed.create(() => aSignal.get());
+            
+            // dispose実行前と実行後で値が変化しないことを確認する
+            logs.push(computed.get());
+            computed.dispose();
+            aSignal.set(3);
+            logs.push(computed.get());
+            logs.push(computed.get());
+            expect(logs).toEqual([1, 1, 1]);
+        });
 
-        // dispose → 依存元を set → get しても計算関数は呼ばれない
-        it.todo("一度計算されたComputedをdispose後に行うgetは再計算をしない");
+        it("disposeを2回実行しても壊れない", () => {
 
-        // get時に一度だけ計算される
-        it.todo("作成されて一度もgetされずdisposeするとget時に一度だけ計算される");
+            const logs = [];
+            const aSignal = new Signal(1);
+            const computed = Computed.create(() => aSignal.get());
+            
+            // dispose実行前と実行後で値が変化しないことを確認する
+            logs.push(computed.get());
+            computed.dispose();
+            computed.dispose();
+            aSignal.set(3);
+            logs.push(computed.get());
+            expect(logs).toEqual([1, 1]);
+        });
 
-        // 誰からも参照されないことを確かめる
-        it.todo("Effectの中で作ったComputedは、親のdisposeで破棄される");
+        it("一度計算されたComputedをdispose後に行うgetは再計算をしない", () => {
 
-        it.todo("ネストしたComputedのdisposeを呼ぶとアウターのComputedが呼ばれても内部のComputedは呼ばれない");
+            // mockを間に挟んで再計算されているかどうかを確認する
+            const aSignal = new Signal(1);
+            const mock = vi.fn(() => aSignal.get());
+            const computed = Computed.create(mock);
+            computed.get();
+
+            // dispose → 依存元を set → get しても計算関数は呼ばれない
+            computed.dispose();
+            aSignal.set(3);
+            computed.get();
+            expect(mock).toHaveBeenCalledTimes(1);
+        });
+
+        it("作成されて一度もgetされずdisposeするとget時に一度だけ計算される", () => {
+
+            const logs = [];
+            const aSignal = new Signal(1);
+            const computed = Computed.create(() => aSignal.get());
+            
+            // get時に一度だけ計算される
+            computed.dispose();
+            logs.push(computed.get());
+            aSignal.set(3);
+            logs.push(computed.get());
+            expect(logs).toEqual([1, 1]);
+        });
+
+        it("Effectの中で作ったComputedは、親のdisposeで破棄される", () => {
+
+            // 誰からも参照されないことを確かめる
+            const logs: number[] = [];
+            const aSignal = new Signal(1);
+            const bSignal = new Signal(2);
+            const dispose = createEffect(() => {
+                logs.push(Computed.create(() => aSignal.get() + bSignal.get()).get());
+            });
+
+            // 実行後にdisposeしてからsetで値の変更を見る
+            dispose();
+            aSignal.set(3);
+            bSignal.set(4);
+            expect(logs).toEqual([3]);
+        });
+
+        it("ネストしたComputedのdisposeを呼ぶとアウターのComputedが呼ばれても内部のComputedは呼ばれない", () => {
+            
+            const mock = vi.fn();
+            const innerComputed = Computed.create(mock);
+            const outerComputed = Computed.create(() => innerComputed.get());
+            
+            // 実行→dispose→実行でmockが呼ばれる回数を確認する
+            outerComputed.get();
+            innerComputed.dispose();
+            outerComputed.get();
+            expect(mock).toHaveBeenCalledOnce();
+        });
 
     });
 
@@ -507,51 +589,205 @@ describe("Computedの実装テスト", () => {
     describe("読まれるまで計算しない（遅延実行）", () => {
 
         // computedにmockを忍ばせてsetが動いても呼ばれないことを確認する
-        it.todo("実際に呼び出されるまで計算が行われない");
+        it("実際に呼び出されるまで計算が行われない", () => {
 
-        it.todo("呼び出したら計算が行われる");
+            const aSignal = new Signal(1);
+            const mock = vi.fn(() => aSignal.get());
+            Computed.create(mock);
+
+            // setの時点では呼ばれない
+            aSignal.set(3);
+            expect(mock).toHaveBeenCalledTimes(0);
+        });
+
+        it("呼び出したら計算が行われる", () => {
+
+            const aSignal = new Signal(1);
+            const mock = vi.fn(() => aSignal.get());
+            const computed = Computed.create(mock);
+
+            // getを呼び出して初めてmockが呼ばれる
+            computed.get();
+            expect(mock).toHaveBeenCalledTimes(1);
+        });
 
     });
 
     // 不要な計算を行わないというpull型のキャッシュ実装に対する内容
     describe("元が変わっていなければ計算し直さない（キャッシュ）", () => {
 
-        // Signalの変更なしでgetした時に計算されないことを確認する
-        it.todo("依存元の値が変更されないなら再計算はされない");
+        it("依存元の値が変更されないなら再計算はされない", () => {
 
-        it.todo("依存元の値が変更されている場合は再計算を行う");
+            const aSignal = new Signal(1);
+            const mock = vi.fn(() => aSignal.get());
+            const computed = Computed.create(mock);
+
+            // getしてもSignalの値が変わっていないから計算されていない
+            computed.get();
+            computed.get();
+            expect(mock).toHaveBeenCalledTimes(1);
+        });
+
+        it("依存元の値が変更されている場合は再計算を行う", () => {
+                        
+            const aSignal = new Signal(1);
+            const mock = vi.fn(() => aSignal.get());
+            const computed = Computed.create(mock);
+
+            // getしてもSignalの値が変わっていないから計算されていない
+            computed.get();
+            aSignal.set(3);
+            computed.get();
+            expect(mock).toHaveBeenCalledTimes(2);
+        });
 
         // 再計算されない観点でテストを行う（影響されない）
-        it.todo("無関係なSignalをsetしても再計算されない");
+        it("無関係なSignalをsetしても再計算されない", () => {
+                        
+            const aSignal = new Signal(1);
+            const bSignal = new Signal(2);
+            const mock = vi.fn(() => aSignal.get());
+            const computed = Computed.create(mock);
+
+            // getしてもSignalの値が変わっていないから計算されていない
+            computed.get();
+            bSignal.set(4);
+            computed.get();
+            expect(mock).toHaveBeenCalledOnce();
+        });
     });
 
     describe("元が変わったら自分を読んでいる下流に知らせる（伝染）", () => {
 
-        it.todo("自身に依存する対象がいる状態で依存元が変更されたら自身に依存する対象は呼び出される");
+        it("自身に依存する対象がいる状態で依存元が変更されたら自身に依存する対象は呼び出される", () => {
 
-        it.todo("動的にComputedの依存元が変わっても新しく依存する依存元を追従する");
+            const logs: number[] = [];
+            const aSignal = new Signal(1);
+            const computed = Computed.create(() => aSignal.get());
+            createEffect(() => logs.push(computed.get()));
 
-        it.todo("動的に依存しなくなった対象は変更されても追従しない");
+            // aSignalが変更されると下流のEffectも動くはず
+            aSignal.set(3);
+            expect(logs).toEqual([1, 3]);
+        });
+
+        it("動的にComputedの依存元が変わっても新しく依存する依存元を追従する", () => {
+                        
+            const logs: number[] = [];
+            let isExecuted = false;
+            const aSignal = new Signal(1);
+            const firstComputed = Computed.create(() => aSignal.get());
+            const secondComputed = Computed.create(() => aSignal.get() + 1);
+            createEffect(() => {
+                if(isExecuted) {
+                    logs.push(secondComputed.get());
+                    return;
+                }
+                logs.push(firstComputed.get());
+                isExecuted = true;
+            });
+
+            // 作成時はfirstだが二回目以降はsecondだけ動く
+            aSignal.set(3);
+            aSignal.set(5);
+            expect(logs).toEqual([1, 4, 6]);
+        });
+
+        it("動的に依存しなくなった対象は変更されても追従しない", () => {
+
+            const logs: number[] = [];
+            let isExecuted = false;
+            const aSignal = new Signal(1);
+            const bSignal = new Signal(2);
+            const firstComputed = Computed.create(() => aSignal.get());
+            const secondComputed = Computed.create(() => bSignal.get());
+            createEffect(() => {
+                if(isExecuted) {
+                    logs.push(secondComputed.get());
+                    return;
+                }
+                logs.push(firstComputed.get());
+                isExecuted = true;
+            });
+
+            // 一回めの変更は反応するが、2回め以降はsecondにしか依存していないはず
+            aSignal.set(3);
+            // 全く反応がないはず
+            aSignal.set(5);
+            bSignal.set(4);
+            expect(logs).toEqual([1, 2, 4]);
+        });
 
         // glitch freeの観点
         // ダイヤモンドグラフにおいてSignalとSignalを使用するComputedが
         // 同時に使用される状態だと下流が独立して動いてしまうためその点が
         // 発生しないことを確認する
-        it.todo("Signalとそれに依存するComputedの両方に依存するEffectがある場合Effectの実行は一度だけ行われる")
+        it("Signalとそれに依存するComputedの両方に依存するEffectがある場合Effectの実行は一度だけ行われる", () => {
 
-        it.todo("ダイヤモンドグラフの時にEffectが見る値は常に新しい値になる");
+            const signal = new Signal(1);
+            const computed = Computed.create(() => signal.get() + 1);
+            const mock = vi.fn(() => {
+                signal.get();
+                computed.get();
+            });
+            createEffect(mock);
+
+            // 初回にmockは動くがsignalが一度動いてもEffectの中身は1度だけ動く
+            signal.set(3);
+            expect(mock).toHaveBeenCalledTimes(2);
+        })
+
+        it("ダイヤモンドグラフの時にEffectが見る値は常に新しい値になる", () => {
+            
+            const logs: number[] = [];
+            const signal = new Signal(1);
+            const computed = Computed.create(() => signal.get() + 1);
+            createEffect(() => {
+                logs.push(signal.get());
+                logs.push(computed.get());
+            });
+
+            // signalを変更するとそのsignalの最新の値をcomputedは計算値に使う
+            signal.set(3);
+            expect(logs).toEqual([1, 2, 3, 4]);
+        });
 
         // 下流に正しく処理が流れることを確認する
-        it.todo("ComputedがComputedを追従していてもglitchは起きない");
+        it("ComputedがComputedを追従していてもglitchは起きない", () => {
 
+            const logs: string[] = [];
+            const signal = new Signal("a");
+            const firstComputed = Computed.create(() => signal.get() + "b");
+            const secondComputed = Computed.create(() => firstComputed.get() + "c");
+            createEffect(() => {
+                logs.push(signal.get());
+                logs.push(firstComputed.get());
+                logs.push(secondComputed.get());
+            });
+
+            // Signalが変更されても下流まで正しくSignalの値が使用される
+            signal.set("x");
+            expect(logs).toEqual(["a", "ab", "abc", "x", "xb", "xbc"]);
+        });
 
         // 再実行時に依存関係がリセットされる（動的な依存関係の整理）
-        it.todo("Effectの中で作ったComputedは、親のEffectの再実行で破棄される");
+        it("Effectの中で作ったComputedは、親のEffectの再実行で破棄される", () => {
+
+            const logs: number[] = [];
+            const signal = new Signal(1);
+            const dispose = createEffect(() => {
+                const computed = Computed.create(() => signal.get());
+                logs.push(computed.get());
+            });
+
+            // dispose後にsignalの変化で中で依存しているcomputedが動かない
+            dispose();
+            signal.set(3);
+            expect(logs).toEqual([1]);
+        });
 
         // #NOTE: batch時のversionで考える
         it.todo("再計算の結果が前と同じとき、下流に知らせるか");
 
     });
-
-    // 「残る状態」「他人のコード」「時間のずれ」
 });
