@@ -39,6 +39,21 @@ class ReactiveError extends Error {
 
 }
 
+/**
+ * Signalの更新中に下位の計算処理で例外が発生した際に投げられる\
+ * 複数のエラーオブジェクトを保持した専用のエラー
+ */
+class ReactiveAggregateError extends ReactiveError {
+
+    readonly errors: readonly unknown[];
+
+    constructor(errors: unknown[], message: string) {
+        super(message);
+        this.errors = errors;
+        this.name = "ReactiveAggregateError";
+    }
+}
+
 
 /**
  * reactiveモジュール内で共有するためのcurrentObserve\
@@ -92,6 +107,7 @@ const [schedule, flush] = (() => {
         // もしかしたら無限ループの可能性あり ← 例外で伝える
         let count = 0;
         try {
+            const errors: unknown[] = [];
             while(scheduleSet.size !== 0) {
 
                 // 例えば100回以上countが回っていたら無限ループ扱いとか
@@ -106,23 +122,25 @@ const [schedule, flush] = (() => {
 
                 // スケジュールに積まれていたタスクを実行する
                 for (const observer of copy) {
-                    observer.run();
+                    // 実行単位で例外の検証を行う
+                    try {
+                        observer.run();
+                    } catch(e: unknown) {
+                        // もし実行中に例外が発生したらそのことを一時的に溜めておく
+                        // 例外を発生させる可能性があるのはEffect.runとComputed.getなので
+                        // そこは正しく動く必要がある
+                        errors.push(e);
+                    }
                 }
+            }
+            if(errors.length > 0) {
+                throw new ReactiveAggregateError(errors, "値の更新中に例外が発生しました");
             }
         } finally {
             // 途中で例外が発生しループが強制終了した場合はタスクを空にする
             // （正しく動いていたらループは空になっているはずだから）
             scheduleSet.clear();
             isSchedule = false;
-
-            // #TODO: ループ中に例外が発生した際、残りのスケジュールが処理されずに破棄されることで
-            // 本来そのスケジュールが実行されるから解消される依存関係が正しく実行されなくなる
-            // 一つ目のEffectが例外を投げる
-            // →次のEffectが動かない
-            // →Computedに依存している場合isDirtyがtrueにならないまま残る
-            // →そのことで二度とそのComputedのisDirtyが立たずにEffectも呼ばれない
-            // なので、例外が発生したとしても依存関係や親子関係が解消されるようにする必要がある
-            // notifyでされる処理は全て行なった上で処理する
         }
     }
 
@@ -191,12 +209,16 @@ class Signal<T> {
      * 値を設定する。newValueと以前の値が同じ場合は値の更新が走らない。
      * @param newValue 新しい値
      * 
+     * 値の更新を他の依存対象に反映させる過程で例外が発生した場合、\
+     * すべての更新処理が実行されてから例外として処理される。
+     * 
      * **※注意：Effectに渡す関数内で同じSignalのget()を同じset()に入れると無限ループを起こす**
      * @example
      * const signal = new Signal(0);
      * createEffect(() => {
      *     signal.set(signal.get() + 1); // ← 無限ループを起こす
      * });
+     * 
      */
     set (this: Signal<T>, newValue: T) {
 
@@ -386,6 +408,8 @@ class Computed<T> {
     #value: T | typeof UNSET = UNSET;
     #owner: Owner;
     #parentOwner: Owner | null;
+    // callbackで例外が発生した場合に保持して
+    #error: { value: unknown } | null = null;
 
     private constructor(token: symbol, callback: () => T) {
         // factoryメソッド経由以外では生成できないようにする
@@ -478,7 +502,17 @@ class Computed<T> {
             currentObserver.deps.add(this.#subscribers);
         }
 
-        // ここではTに絞り込まれているため以降は必ずvalueが存在する
+
+        // #NOTE: 下位依存の保持と下位への通達が完了してから
+        // 下位への処理を行い依存関係は崩れないようにする
+
+        // 計算終了後にエラーがある場合は下位に伝染させる
+        if (!this.#isDirty && this.#error) {
+            // 依存元が変わるまで同じ例外を返す
+            throw this.#error.value;
+        }
+
+        // 計算済で未定ではない場合は以降の処理をしない
         if (!this.#isDirty && this.#value !== UNSET) {
             return this.#value;
         }
@@ -496,10 +530,18 @@ class Computed<T> {
 
             // 依存はcallbackの中で使用されていたら登録される
             this.#value = this.#callback();
-            // 計算が正しく行えた場合のみ再計算フラグを下す
-            this.#isDirty = false;
+            // 問題なく計算が行えたらエラーなしの状態にする
+            this.#error = null;
             return this.#value;
+        } catch (error: unknown ){
+            // 例外が発生した時に例外を内部で管理しておく
+            this.#error = { value: error };
+            throw error;
         } finally {
+
+            // 例外の有無に関わらず計算処理は完了扱いにする
+            this.#isDirty = false;
+
             currentObserver = prevObserver;
 
             // 計算が完了したらカウントを戻す
@@ -525,4 +567,4 @@ class Computed<T> {
 }
 
 
-export { Signal, createEffect, Computed, ReactiveError }
+export { Signal, createEffect, Computed, ReactiveError, ReactiveAggregateError }

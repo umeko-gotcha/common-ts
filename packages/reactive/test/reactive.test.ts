@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { Signal, createEffect, Computed, ReactiveError } from "../src/reactive";
+import { Signal, createEffect, Computed, ReactiveError, ReactiveAggregateError } from "../src/reactive";
 
 
 
@@ -43,6 +43,118 @@ describe("Effectの基本動作テスト", () => {
         
         // テストの結果
         expect(log).toEqual(["a", "b"]);
+    });
+
+    it("Signalの更新処理でSignalに依存するノードが例外を投げたら受け取れる", () => {
+        
+        const name = new Signal("a");
+        // nameの更新前に依存先として登録しておく
+        try {
+            createEffect(() => { 
+                name.get();
+                throw new Error();
+            })
+        } catch {
+            // 何もしない
+        }
+
+        expect(() => name.set("b")).toThrow(ReactiveAggregateError);
+    })
+        
+
+    it("Signalの更新処理でSignalに依存するノードが例外を投げたら複数あってもまとめて受け取れる", () => {
+        
+        // 複数依存している場合に例外が返ってくるかどうか確認する
+        const name = new Signal("a");
+        try {
+            createEffect(() => {
+                name.get();
+                throw new Error("1");
+            });
+        } catch {
+            // 特に何もしない
+        }
+        try {
+            createEffect(() => {
+                name.get();
+                throw new Error("2");
+            });
+        } catch {
+            // 特に何もしない
+        }
+        let caught: unknown;
+        try {
+            name.set("b");
+        } catch (e: unknown) {
+            caught = e;
+        }
+
+        // 例外が同じものかどうか確認する
+        expect(caught).toBeInstanceOf(ReactiveAggregateError);
+        // #NOTE: 例外のメッセージの中身で比較するようにする
+        const errors = [
+            { message: "1" }, 
+            { message: "2" }
+        ]
+        expect(caught).toMatchObject({ errors });
+    });
+
+    it("Signalに依存する複数のノードのうち一つが例外を投げても他の例外は実行される", () => {
+
+        // 並行に登録されたEffectがどちらとも動くかどうかを確認する
+        const name = new Signal("a");
+        createEffect(() => {
+            if(name.get() === "b") {
+                throw new Error();
+            }
+        });
+        const successComputed = Computed.create(() =>  name.get());
+        const mock = vi.fn(() => successComputed.get());
+        createEffect(mock);
+        mock.mockClear();
+
+        // 本当に例外が起きたことを確認する
+        expect(() => name.set("b")).toThrow(ReactiveAggregateError);
+        // それでも残りは動くことを確認する
+        expect(mock).toHaveBeenCalledOnce();
+    });
+
+    it("Computedが例外を投げた後も、依存元が変われば再び動く", () => {
+
+        // 例外中も依存関係は整理されているので例外を投げなくなったら正常な処理になるはず
+        const s = new Signal("a");
+        const c = Computed.create(() => {
+            if (s.get() === "b") {
+                throw new Error("bad");
+            }
+            return s.get();
+        });
+        const log: string[] = [];
+        createEffect(() => { 
+            log.push(c.get()); 
+        });
+
+        // bにしたら例外が投げられるが依存関係はそのままの想定なので
+        // 改めて例外を投げない処理になったら問題なく下位の処理が動くはず
+        expect(() => s.set("b")).toThrow(ReactiveAggregateError);
+        s.set("c");
+        expect(log).toEqual(["a", "c"]);
+    });
+
+    it("Computedの例外は、依存元が変わるまで再計算せずに同じ例外を返す", () => {
+
+        // 例外がある場合は再計算せずそのまま下流に流す設計のため
+        // 計算はされず例外はそのまま流れることを確かめる
+        const s = new Signal(1);
+        const fn = vi.fn(() => { 
+            s.get(); 
+            throw new Error("x"); 
+        });
+        const c = Computed.create(fn);
+
+        expect(() => c.get()).toThrow("x");
+        expect(() => c.get()).toThrow("x");
+        expect(fn).toHaveBeenCalledOnce();
     });
 });
 
