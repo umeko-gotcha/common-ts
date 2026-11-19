@@ -54,7 +54,6 @@ describe("Effectの基本動作テスト", () => {
                 name.get();
                 throw new Error();
             })
-            // jsの例外は受け取らないなら()を書かなくてもいい
         } catch {
             // 何もしない
         }
@@ -93,9 +92,11 @@ describe("Effectの基本動作テスト", () => {
         // 例外が同じものかどうか確認する
         expect(caught).toBeInstanceOf(ReactiveAggregateError);
         // #NOTE: 例外のメッセージの中身で比較するようにする
-        // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
-        expect((caught as ReactiveAggregateError).errors.map((e: unknown) => (e as Error).message))
-            .toEqual(["1", "2"]);
+        const errors = [
+            { message: "1" }, 
+            { message: "2" }
+        ]
+        expect(caught).toMatchObject({ errors });
     });
 
     it("Signalに依存する複数のノードのうち一つが例外を投げても他の例外は実行される", () => {
@@ -118,7 +119,6 @@ describe("Effectの基本動作テスト", () => {
         expect(mock).toHaveBeenCalledOnce();
     });
 
-    // AIソースにコメント
     it("Computedが例外を投げた後も、依存元が変われば再び動く", () => {
 
         // 例外中も依存関係は整理されているので例外を投げなくなったら正常な処理になるはず
@@ -141,8 +141,6 @@ describe("Effectの基本動作テスト", () => {
         expect(log).toEqual(["a", "c"]);
     });
 
-
-    // AIソースにコメント
     it("Computedの例外は、依存元が変わるまで再計算せずに同じ例外を返す", () => {
 
         // 例外がある場合は再計算せずそのまま下流に流す設計のため
