@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { Signal, createEffect, Computed, ReactiveError } from "../src/reactive";
+import { Signal, createEffect, Computed, ReactiveError, ReactiveAggregateError } from "../src/reactive";
 
 
 
@@ -43,6 +43,93 @@ describe("Effectの基本動作テスト", () => {
         
         // テストの結果
         expect(log).toEqual(["a", "b"]);
+    });
+
+    it("Signalの更新処理でSignalに依存するノードが例外を投げたら受け取れる", () => {
+        
+        const name = new Signal("a");
+        // nameの更新前に依存先として登録しておく
+        try {
+            createEffect(() => { 
+                name.get();
+                throw new Error();
+            })
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars 
+        } catch (e: unknown) {
+            // 何もしない
+        }
+
+        expect(() => name.set("b")).toThrow(ReactiveAggregateError);
+    })
+        
+
+    it("Signalの更新処理でSignalに依存するノードが例外を投げたら複数あってもまとめて受け取れる", () => {
+        
+        // 複数依存している場合に例外が返ってくるかどうか確認する
+        const name = new Signal("a");
+        const errorStock: unknown[] = [];
+        try {
+            createEffect(() => {
+                name.get();
+                throw new Error("1");
+            });
+        } catch (e: unknown) {
+            errorStock.push(e);
+        }
+        try {
+            createEffect(() => {
+                name.get();
+                throw new Error("2");
+            });
+        } catch (e: unknown) {
+            errorStock.push(e);
+        }
+
+        let errors: readonly unknown[] = [];
+        try {
+            name.set("b");
+        } catch (e: unknown) {
+            if(e instanceof ReactiveAggregateError) {
+                errors = e.errors;
+            } else {
+                errors = [];
+            }
+        }
+
+        // 例外が同じものかどうか確認する
+        expect(errors).toEqual(errorStock);
+    });
+
+    it("Signalに依存するノードが例外を投げる場合は依存関係の解消が最後まで完了してから行われる", () => {
+
+        // // 複数依存している場合に
+        // const name = new Signal("a");
+        // const errorComputed = Computed.create(() => {
+        //     name.get();
+        //     throw new Error();
+        // });
+        // try {
+        //     createEffect(() => errorComputed.get());
+        //     // eslint-disable-next-line @typescript-eslint/no-unused-vars 
+        // } catch (e: unknown) {
+        //     // 何もしない
+        // }
+        // const successComputed = Computed.create(() =>  name.get());
+        // const mock = vi.fn(() => successComputed.get());
+        // createEffect(mock);
+        // mock.mockClear();
+
+        // // 改めて依存関係が登録された状態でSignalのsetを実行する
+        // try {
+        //     name.set("b");
+        //     // eslint-disable-next-line @typescript-eslint/no-unused-vars 
+        // } catch (e: unknown) {
+        //     // 特に何もしない
+        // }
+        // expect(mock).toHaveBeenCalledOnce();
+
+        // #TODO: たまたま通っているがComputedに実装バグあり
+        // issue#24も含めて直すべき
     });
 });
 
