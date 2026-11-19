@@ -408,6 +408,8 @@ class Computed<T> {
     #value: T | typeof UNSET = UNSET;
     #owner: Owner;
     #parentOwner: Owner | null;
+    // callbackで例外が発生した場合に保持して
+    #error: { value: unknown } | null = null;
 
     private constructor(token: symbol, callback: () => T) {
         // factoryメソッド経由以外では生成できないようにする
@@ -500,7 +502,17 @@ class Computed<T> {
             currentObserver.deps.add(this.#subscribers);
         }
 
-        // ここではTに絞り込まれているため以降は必ずvalueが存在する
+
+        // #NOTE: 下位依存の保持と下位への通達が完了してから
+        // 下位への処理を行い依存関係は崩れないようにする
+
+        // 計算終了後にエラーがある場合は下位に伝染させる
+        if (!this.#isDirty && this.#error) {
+            // 依存元が変わるまで同じ例外を返す
+            throw this.#error.value;
+        }
+
+        // 計算済で未定ではない場合は以降の処理をしない
         if (!this.#isDirty && this.#value !== UNSET) {
             return this.#value;
         }
@@ -518,10 +530,18 @@ class Computed<T> {
 
             // 依存はcallbackの中で使用されていたら登録される
             this.#value = this.#callback();
-            // 計算が正しく行えた場合のみ再計算フラグを下す
-            this.#isDirty = false;
+            // 問題なく計算が行えたらエラーなしの状態にする
+            this.#error = null;
             return this.#value;
+        } catch (error: unknown ){
+            // 例外が発生した時に例外を内部で管理しておく
+            this.#error = { value: error };
+            throw error;
         } finally {
+
+            // 例外の有無に関わらず計算処理は完了扱いにする
+            this.#isDirty = false;
+
             currentObserver = prevObserver;
 
             // 計算が完了したらカウントを戻す

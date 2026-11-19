@@ -54,8 +54,8 @@ describe("Effectの基本動作テスト", () => {
                 name.get();
                 throw new Error();
             })
-            // eslint-disable-next-line @typescript-eslint/no-unused-vars 
-        } catch (e: unknown) {
+            // jsの例外は受け取らないなら()を書かなくてもいい
+        } catch {
             // 何もしない
         }
 
@@ -67,69 +67,96 @@ describe("Effectの基本動作テスト", () => {
         
         // 複数依存している場合に例外が返ってくるかどうか確認する
         const name = new Signal("a");
-        const errorStock: unknown[] = [];
         try {
             createEffect(() => {
                 name.get();
                 throw new Error("1");
             });
-        } catch (e: unknown) {
-            errorStock.push(e);
+        } catch {
+            // 特に何もしない
         }
         try {
             createEffect(() => {
                 name.get();
                 throw new Error("2");
             });
-        } catch (e: unknown) {
-            errorStock.push(e);
+        } catch {
+            // 特に何もしない
         }
-
-        let errors: readonly unknown[] = [];
+        let caught: unknown;
         try {
             name.set("b");
         } catch (e: unknown) {
-            if(e instanceof ReactiveAggregateError) {
-                errors = e.errors;
-            } else {
-                errors = [];
-            }
+            caught = e;
         }
 
         // 例外が同じものかどうか確認する
-        expect(errors).toEqual(errorStock);
+        expect(caught).toBeInstanceOf(ReactiveAggregateError);
+        // #NOTE: 例外のメッセージの中身で比較するようにする
+        // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+        expect((caught as ReactiveAggregateError).errors.map((e: unknown) => (e as Error).message))
+            .toEqual(["1", "2"]);
     });
 
-    it("Signalに依存するノードが例外を投げる場合は依存関係の解消が最後まで完了してから行われる", () => {
+    it("Signalに依存する複数のノードのうち一つが例外を投げても他の例外は実行される", () => {
 
-        // // 複数依存している場合に
-        // const name = new Signal("a");
-        // const errorComputed = Computed.create(() => {
-        //     name.get();
-        //     throw new Error();
-        // });
-        // try {
-        //     createEffect(() => errorComputed.get());
-        //     // eslint-disable-next-line @typescript-eslint/no-unused-vars 
-        // } catch (e: unknown) {
-        //     // 何もしない
-        // }
-        // const successComputed = Computed.create(() =>  name.get());
-        // const mock = vi.fn(() => successComputed.get());
-        // createEffect(mock);
-        // mock.mockClear();
+        // 並行に登録されたEffectがどちらとも動くかどうかを確認する
+        const name = new Signal("a");
+        createEffect(() => {
+            if(name.get() === "b") {
+                throw new Error();
+            }
+        });
+        const successComputed = Computed.create(() =>  name.get());
+        const mock = vi.fn(() => successComputed.get());
+        createEffect(mock);
+        mock.mockClear();
 
-        // // 改めて依存関係が登録された状態でSignalのsetを実行する
-        // try {
-        //     name.set("b");
-        //     // eslint-disable-next-line @typescript-eslint/no-unused-vars 
-        // } catch (e: unknown) {
-        //     // 特に何もしない
-        // }
-        // expect(mock).toHaveBeenCalledOnce();
+        // 本当に例外が起きたことを確認する
+        expect(() => name.set("b")).toThrow(ReactiveAggregateError);
+        // それでも残りは動くことを確認する
+        expect(mock).toHaveBeenCalledOnce();
+    });
 
-        // #TODO: たまたま通っているがComputedに実装バグあり
-        // issue#24も含めて直すべき
+    // AIソースにコメント
+    it("Computedが例外を投げた後も、依存元が変われば再び動く", () => {
+
+        // 例外中も依存関係は整理されているので例外を投げなくなったら正常な処理になるはず
+        const s = new Signal("a");
+        const c = Computed.create(() => {
+            if (s.get() === "b") {
+                throw new Error("bad");
+            }
+            return s.get();
+        });
+        const log: string[] = [];
+        createEffect(() => { 
+            log.push(c.get()); 
+        });
+
+        // bにしたら例外が投げられるが依存関係はそのままの想定なので
+        // 改めて例外を投げない処理になったら問題なく下位の処理が動くはず
+        expect(() => s.set("b")).toThrow(ReactiveAggregateError);
+        s.set("c");
+        expect(log).toEqual(["a", "c"]);
+    });
+
+
+    // AIソースにコメント
+    it("Computedの例外は、依存元が変わるまで再計算せずに同じ例外を返す", () => {
+
+        // 例外がある場合は再計算せずそのまま下流に流す設計のため
+        // 計算はされず例外はそのまま流れることを確かめる
+        const s = new Signal(1);
+        const fn = vi.fn(() => { 
+            s.get(); 
+            throw new Error("x"); 
+        });
+        const c = Computed.create(fn);
+
+        expect(() => c.get()).toThrow("x");
+        expect(() => c.get()).toThrow("x");
+        expect(fn).toHaveBeenCalledOnce();
     });
 });
 
