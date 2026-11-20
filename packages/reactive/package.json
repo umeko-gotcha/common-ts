@@ -1,7 +1,7 @@
 {
   "name": "@u-gotcha/reactive",
   "version": "0.1.0",
-  "description": "",
+  "description": "Fine-grained reactive primitives for TypeScript: signals, lazy computed values and effects with glitch-free updatess",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -19,6 +19,18 @@
   "scripts": {
     "build": "vite build && tsc -p tsconfig.json"
   },
-  "keywords": [],
+  "keywords": [
+    "reactive",
+    "reactivity",
+    "signals",
+    "signal",
+    "computed",
+    "effect",
+    "fine-grained",
+    "state",
+    "state-management",
+    "observable",
+    "typescript"
+  ],
   "type": "module"
 }
