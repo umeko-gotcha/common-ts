@@ -733,6 +733,78 @@ describe("Computedの実装テスト", () => {
             expect(created[0].get()).toBe(1);
         });
 
+        it("親Computedを再計算すると、前回親の中で作った子Computedは破棄される", () => {
+            
+            // 親の計算によってComputedの参照値が削除されることを確認したい
+            // 子の参照値を外に確保する→値を取得することで更新されたものかどうか確認する
+            const signal = new Signal(1);
+            const trigger = new Signal(2);
+            const created: Computed<number>[] = [];
+            const parent = Computed.create(() => {
+                trigger.get();
+                // 内部で生成することでparentのOwnerに所属させる
+                const child = Computed.create(() => signal.get());
+                // childをSignalに依存させる
+                // →次の実行時に子のdisposeが呼ばれないとSignalに残り続ける
+                child.get();
+                // 依存させた参照値を外で確保しておく
+                created.push(child);
+                return 0;
+            });
+
+            // 1を返すComputedがcreatedに追加される
+            parent.get();
+            trigger.set(4);
+            // set(4)で再計算が必要になるのでget
+            //  → 4を返すComputedがcreatedに追加される
+            parent.get();
+            signal.set(3);
+            // 最初にプッシュしたComputedはすでにSignalから外れているので
+            // 更新されることがない→最初の1のまま変わることがない
+            // もし残っていたらSignalが3を返すComputedになるはず（更新されてしまうため）
+            expect(created[0].get()).toBe(1);
+        });
+
+        it("親Computedをdisposeすると、親の中で作った子Computedも破棄される", () => {
+
+            // 親の所有権に子が入っていれば正しく子がdisposeされるはず
+            const s = new Signal(1);
+            const created: Computed<number>[] = [];
+            const a = Computed.create(() => {
+                const b = Computed.create(() => s.get());
+                b.get();
+                created.push(b);
+                return 0;
+            });
+
+            a.get();
+            a.dispose();
+            s.set(5);
+            expect(created[0].get()).toBe(1);
+        });
+
+        // 計算していないComputedのdispose後にも子の参照値は破棄される
+        it("一度も計算されずにdisposeされたComputedを初めてgetしたとき、中で作られた子はすぐに破棄される", () => {
+
+            const signal = new Signal(1);
+            const created: Computed<number>[] = [];
+            const parent = Computed.create(() => {
+                const child = Computed.create(() => signal.get());
+                child.get();
+                created.push(child);
+                return 0;
+            });
+
+            // 親を破棄した後で初回計算の時に子が生成されても
+            // 子の接続が切れSignalから削除されるはず
+            parent.dispose();
+            parent.get();
+            signal.set(3);
+            // だからこの3は計算結果に反映されないはず
+            expect(created[0].get()).toBe(1);
+        });
+        
+        it.todo("dispose後にcallbackが例外を投げると値の計算がされず実行するたびに例外を投げる");
     });
 
 
@@ -948,7 +1020,7 @@ describe("Computedの実装テスト", () => {
             expect(mock).toHaveBeenCalledOnce();
         });
 
-
+        
         // #NOTE: batch時のversionで考える
         it.todo("再計算の結果が前と同じとき、下流に知らせるか");
 

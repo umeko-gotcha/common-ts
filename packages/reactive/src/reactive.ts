@@ -480,6 +480,10 @@ class Computed<T> {
             // Computedが計算中であることを伝えるためのカウント
             computedDepth.increment();
 
+            // 子を所有するためにnullではなく自身が保持できるようにする
+            const prevOwner = currentOwner;
+            currentOwner = this.#owner;
+
             // 未定値のまま = 一度も計算されていない なので
             // 一度も計算されないまま破棄された場合は、追跡せずに1回だけ計算する
             const prevObserver = currentObserver;
@@ -488,8 +492,10 @@ class Computed<T> {
                 this.#value = this.#callback();
                 return this.#value;
             } finally {
+                // callbackで子が追加された後に自分から子を削除する
+                disposeChildren(this.#owner);
                 currentObserver = prevObserver;
-
+                currentOwner = prevOwner
                 // 計算が完了したらカウントを戻す
                 computedDepth.decrement();
             }
@@ -520,14 +526,16 @@ class Computed<T> {
         // Computedが計算中であることを伝えるためのカウント
         computedDepth.increment();
 
+        // 実行時点で自身の所有権にある参照を一旦クリアにしてから再度処理を行う
+        disposeChildren(this.#owner);
+        const prevOwner = currentOwner;
+        currentOwner = this.#owner;
+
         // 自分に依存する対象があれば一旦受け取って自身をグローバルに登録する
+        cleanUp(this.#observer);
         const prevObserver = currentObserver;
         currentObserver = this.#observer;
         try {
-            // 以前に登録されていた依存関係を解除する
-            disposeChildren(this.#owner);
-            cleanUp(this.#observer);
-
             // 依存はcallbackの中で使用されていたら登録される
             this.#value = this.#callback();
             // 問題なく計算が行えたらエラーなしの状態にする
@@ -543,6 +551,7 @@ class Computed<T> {
             this.#isDirty = false;
 
             currentObserver = prevObserver;
+            currentOwner = prevOwner;
 
             // 計算が完了したらカウントを戻す
             computedDepth.decrement();
