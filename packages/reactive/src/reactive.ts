@@ -480,10 +480,9 @@ class Computed<T> {
             // Computedが計算中であることを伝えるためのカウント
             computedDepth.increment();
 
-            // disposeされた後の再計算の話なので下位のノードが自分を
-            // 保持できないようにあえてnullを共有する
+            // 子を所有するためにnullではなく自身が保持できるようにする
             const prevOwner = currentOwner;
-            currentOwner = null;
+            currentOwner = this.#owner;
 
             // 未定値のまま = 一度も計算されていない なので
             // 一度も計算されないまま破棄された場合は、追跡せずに1回だけ計算する
@@ -493,6 +492,8 @@ class Computed<T> {
                 this.#value = this.#callback();
                 return this.#value;
             } finally {
+                // callbackで子が追加された後に自分から子を削除する
+                disposeChildren(this.#owner);
                 currentObserver = prevObserver;
                 currentOwner = prevOwner
                 // 計算が完了したらカウントを戻す

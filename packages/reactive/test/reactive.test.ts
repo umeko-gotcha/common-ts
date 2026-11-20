@@ -782,6 +782,29 @@ describe("Computedの実装テスト", () => {
             s.set(5);
             expect(created[0].get()).toBe(1);
         });
+
+        // 計算していないComputedのdispose後にも子の参照値は破棄される
+        it("一度も計算されずにdisposeされたComputedを初めてgetしたとき、中で作られた子はすぐに破棄される", () => {
+
+            const signal = new Signal(1);
+            const created: Computed<number>[] = [];
+            const parent = Computed.create(() => {
+                const child = Computed.create(() => signal.get());
+                child.get();
+                created.push(child);
+                return 0;
+            });
+
+            // 親を破棄した後で初回計算の時に子が生成されても
+            // 子の接続が切れSignalから削除されるはず
+            parent.dispose();
+            parent.get();
+            signal.set(3);
+            // だからこの3は計算結果に反映されないはず
+            expect(created[0].get()).toBe(1);
+        });
+        
+        it.todo("dispose後にcallbackが例外を投げると値の計算がされず実行するたびに例外を投げる");
     });
 
 
