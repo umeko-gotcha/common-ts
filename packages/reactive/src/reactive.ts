@@ -1,4 +1,4 @@
-import type { Dispose } from "./reactive-type";
+import type { Dispose } from "./reactive-type.js";
 
 /** 
  * 内部で使用するreactive内で共有される自動追従用のオブジェクト
