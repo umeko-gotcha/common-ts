@@ -3,6 +3,12 @@
   "version": "0.1.0",
   "description": "",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/umeko-gotcha/common-ts.git",
+    "directory": "packages/reactive"
+  },
+  "publishConfig": { "access": "public" },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
