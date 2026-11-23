@@ -21,11 +21,18 @@ type Listener<M extends object, T extends keyof M> = (
     message: Message<M, T>,
 ) => void | Promise<void>;
 
+type Batch<M extends object, T extends keyof M> = (
+    message: Message<M, T>[],
+) => void | Promise<void>;
+
+type SubscriberGroup<M extends object, T extends keyof M> = 
+["listener", topic: T, listener: Listener<M, T>] | ["batch", topic: T[], Batch<M, keyof M>];
+
 /** 
  * 実行後にイベントハンドラーを購読解除するための関数 
  * @returns イベントハンドラーが削除できたかどうか
  */
-type UnSubscriber = () => boolean;
+type UnSubscriber = () => void;
 
 /**
  * イベントの発行側がイベント発行時に発生するエラーに対して処理するためのエラーハンドラー
@@ -34,8 +41,7 @@ type UnSubscriber = () => boolean;
  * @param error listenerの実行時に発生したエラー
  */
 type OnError<M extends object> = <K extends keyof M>(
-    message: Message<M, K>,
-    listener: Listener<M, K>,
+    listener: Listener<M, K> | Batch<M, keyof M>,
     error: unknown
 ) => void;
 
@@ -69,6 +75,8 @@ interface Subscriber<M extends object> {
 export type {
     Message,
     Listener,
+    Batch,
+    SubscriberGroup,
     UnSubscriber,
     OnError,
     Publisher,
