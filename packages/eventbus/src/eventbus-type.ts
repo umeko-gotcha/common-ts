@@ -21,12 +21,15 @@ type Listener<M extends object, T extends keyof M> = (
     message: Message<M, T>,
 ) => void | Promise<void>;
 
-type Batch<M extends object, T extends keyof M> = (
-    message: Message<M, T>[],
-) => void | Promise<void>;
 
-type SubscriberGroup<M extends object, T extends keyof M> = 
-["listener", topic: T, listener: Listener<M, T>] | ["batch", topic: T[], Batch<M, keyof M>];
+/** トピックの配列から、同じ順番のメッセージのタプルを作る */
+type Messages<M extends object, T extends readonly (keyof M)[]> = {
+    [I in keyof T]: T[I] extends keyof M ? Message<M, T[I]> : never;
+};
+
+/** 全部そろったときに呼ばれる関数。メッセージのタプルを受け取る */
+type AllListener<M extends object, T extends readonly (keyof M)[]> =
+    (messages: Messages<M, T>) => void | Promise<void>;
 
 /** 
  * 実行後にイベントハンドラーを購読解除するための関数 
@@ -41,7 +44,8 @@ type UnSubscriber = () => void;
  * @param error listenerの実行時に発生したエラー
  */
 type OnError<M extends object> = <K extends keyof M>(
-    listener: Listener<M, K> | Batch<M, keyof M>,
+    message: Message<M, K>,
+    listener: Listener<M, K>,
     error: unknown
 ) => void;
 
@@ -75,10 +79,10 @@ interface Subscriber<M extends object> {
 export type {
     Message,
     Listener,
-    Batch,
-    SubscriberGroup,
     UnSubscriber,
     OnError,
     Publisher,
     Subscriber,
+    Messages,
+    AllListener
 };
