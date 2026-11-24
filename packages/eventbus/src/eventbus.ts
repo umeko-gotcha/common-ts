@@ -122,6 +122,15 @@ class EventBus<M extends object> {
         // トピックの重複を排除する
         const topicArray = Array.from(new Set(topics));
 
+        // 1. 登録するトピックの重複はしない
+        // 2. トピックごとにイベントを登録する
+        // 3. unSubscriberはトピックのイベント全てを解除する
+        // 4. 複数あるトピックに反応して実行するリスナーの実行タイミングは
+        //    全てのトピックの中で最後のlistenerが実行されてから行われる
+        // 5. 全てのトピックが最低1回動かない限りリスナーは反応しない
+        // 6. 一度listenerが動いたらトピックのカウントは空になる
+        // 7. listenerの実行時点で関連するトピックのメッセージの中で
+        //    それぞれ最新のものが使用される
         const unsubscribers = topicArray.map((topic) =>
 
             // トピックごとにlistenerを登録していく
