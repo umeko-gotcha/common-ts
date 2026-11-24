@@ -247,7 +247,7 @@ describe("EventBus", () => {
         const eventbus = new EventBus<TopicMap>();
         const listener = vi.fn();
         // unsubscribeを保持するための変数
-        let unsubscribe = () => false;
+        let unsubscribe = () => {};
         // unsubscribeの処理をするlistenerの後にunsubscribeの対象となる
         // listenerが登録されている必要があるため、解除する側を先に登録する
         // 再入（リエントランシー）
