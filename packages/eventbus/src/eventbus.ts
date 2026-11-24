@@ -119,7 +119,10 @@ class EventBus<M extends object> {
         // listenerに紐づくトピック全体を保持するためのSet
         const arrived = new Set<keyof M>();
 
-        const unsubscribers = topics.map((topic) =>
+        // トピックの重複を排除する
+        const topicArray = Array.from(new Set(topics));
+
+        const unsubscribers = topicArray.map((topic) =>
 
             // トピックごとにlistenerを登録していく
             this.subscribe(topic, (message) => {
