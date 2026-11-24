@@ -101,22 +101,30 @@ class EventBus<M extends object> {
 
     /**
      * #NOTE: 実装はAI生成で既存の実装と方針を提示し修正案を出力\
-     * 関連する全てのイベントが実行されたことを確認してから実行するlisetnerを定義する
-     * @param bus 
+     * 関連する全てのイベントが実行されたことを確認してから実行するlisetnerを定義する。
+     * 
+     * @this Subscriber
      * @param topics 
      * @param listener 
-     * @returns 
+     * @returns 実行後に関連するトピックの購読を解除する関数
      */
     whenAll<M extends object, const T extends readonly (keyof M)[]>(
         this: Subscriber<M>,
         topics: T,
         listener: AllListener<M, T>,
     ): UnSubscriber {
+
+        // トピックに対応したメッセージを管理するためのMap
         const latest = new Map<keyof M, Message<M, keyof M>>();
+        // listenerに紐づくトピック全体を保持するためのSet
         const arrived = new Set<keyof M>();
 
         const unsubscribers = topics.map((topic) =>
+
+            // トピックごとにlistenerを登録していく
             this.subscribe(topic, (message) => {
+
+                // それぞれのlistenerがお互いのtopicの状況を監視する
                 latest.set(topic, message);
                 arrived.add(topic);
                 // まだ全部そろっていなければ待つ
