@@ -98,48 +98,48 @@ class EventBus<M extends object> {
             this.#assertError(errorHandler, message, listener);
         }
     }
-}
 
-/**
- * #NOTE: 実装はAI生成で既存の実装と方針を提示し修正案を出力\
- * 関連する全てのイベントが実行されたことを確認してから実行するlisetnerを定義する
- * @param bus 
- * @param topics 
- * @param listener 
- * @returns 
- */
-const whenAll = <M extends object, const T extends readonly (keyof M)[]>(
-    bus: Subscriber<M>,
-    topics: T,
-    listener: AllListener<M, T>,
-): UnSubscriber => {
-    const latest = new Map<keyof M, Message<M, keyof M>>();
-    const arrived = new Set<keyof M>();
+    /**
+     * #NOTE: 実装はAI生成で既存の実装と方針を提示し修正案を出力\
+     * 関連する全てのイベントが実行されたことを確認してから実行するlisetnerを定義する
+     * @param bus 
+     * @param topics 
+     * @param listener 
+     * @returns 
+     */
+    whenAll<M extends object, const T extends readonly (keyof M)[]>(
+        this: Subscriber<M>,
+        topics: T,
+        listener: AllListener<M, T>,
+    ): UnSubscriber {
+        const latest = new Map<keyof M, Message<M, keyof M>>();
+        const arrived = new Set<keyof M>();
 
-    const unsubscribers = topics.map((topic) =>
-        bus.subscribe(topic, (message) => {
-            latest.set(topic, message);
-            arrived.add(topic);
-            // まだ全部そろっていなければ待つ
-            if (arrived.size < new Set(topics).size) {
-                return;
+        const unsubscribers = topics.map((topic) =>
+            this.subscribe(topic, (message) => {
+                latest.set(topic, message);
+                arrived.add(topic);
+                // まだ全部そろっていなければ待つ
+                if (arrived.size < new Set(topics).size) {
+                    return;
+                }
+                // そろったらリセットしてから呼ぶ
+                arrived.clear();
+                // #NOTE: topicsの順にlatestから取り出すので、各要素は対応するトピックのMessage
+                // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+                const messages = topics.map((t) => latest.get(t)) as Messages<M, T>;
+                return listener(messages);
+            }),
+        );
+
+        return () => {
+            for (const unsubscribe of unsubscribers) {
+                unsubscribe();
             }
-            // そろったらリセットしてから呼ぶ
-            arrived.clear();
-            // #NOTE: topicsの順にlatestから取り出すので、各要素は対応するトピックのMessage
-            // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
-            const messages = topics.map((t) => latest.get(t)) as Messages<M, T>;
-            return listener(messages);
-        }),
-    );
-
-    return () => {
-        for (const unsubscribe of unsubscribers) {
-            unsubscribe();
-        }
-    };
+        };
+    }
 }
 
 
 
-export { EventBus, whenAll };
+export { EventBus };
