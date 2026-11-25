@@ -76,7 +76,7 @@ interface Subscriber<M extends object> {
     subscribe<T extends keyof M>(topic: T, listener: Listener<M, T>): UnSubscriber;
 
     /** 複数のトピックに対するリスナーを購読する */
-    whenAll<M extends object, const T extends readonly (keyof M)[]>(
+    whenAll<const T extends readonly (keyof M)[]>(
         this: Subscriber<M>,
         topics: T,
         listener: AllListener<M, T>,
