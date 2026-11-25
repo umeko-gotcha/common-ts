@@ -4,7 +4,8 @@ import type {
     UnSubscriber,
     OnError,
     Messages,
-    AllListener
+    AllListener,
+    NoDuplicate
 } from "./eventbus-type";
 
 
@@ -108,7 +109,7 @@ class EventBus<M extends object> {
      * @returns 実行後に関連するトピックの購読を解除する関数
      */
     whenAll<const T extends readonly (keyof M)[]>(
-        topics: T,
+        topics: T & NoDuplicate<T>,
         listener: AllListener<M, T>,
     ): UnSubscriber {
 
