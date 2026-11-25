@@ -6,7 +6,7 @@ import type {
     Messages,
     AllListener,
     NoDuplicate
-} from "./eventbus-type";
+} from "./eventbus-type.js";
 
 
 /** 
