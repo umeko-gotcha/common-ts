@@ -33,7 +33,6 @@ type AllListener<M extends object, T extends readonly (keyof M)[]> =
 
 /** 
  * 実行後にイベントハンドラーを購読解除するための関数 
- * @returns イベントハンドラーが削除できたかどうか
  */
 type UnSubscriber = () => void;
 

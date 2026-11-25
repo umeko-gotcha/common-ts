@@ -265,30 +265,6 @@ describe("EventBus", () => {
     // #NOTE: セットで動く前提なので個別に反応するかどうかは確認しなくてもいい？
     it.todo("トピックごとにイベントを登録する");
 
-    // it("登録するトピックの重複はしない", () => {
-
-    //     const eventbus = new EventBus<TopicMap>();
-    //     const topics = ["greet", "count", "greet"] as const;
-    //     let logs: Messages<TopicMap, typeof topics> | [] = [];
-    //     eventbus.whenAll(topics, (messages: Messages<TopicMap, typeof topics>) => {
-    //         logs = messages;
-    //     });
-
-    //     // それぞれのイベントを発火する
-    //     const greetMessage: Message<TopicMap, "greet"> = {
-    //         topic: "greet",
-    //         payload: { name: "greetTest" }
-    //     }
-    //     eventbus.publish(greetMessage);
-    //     const countMessage: Message<TopicMap, "count"> = {
-    //         topic: "count",
-    //         payload: { n: 0 },
-    //     }
-    //     eventbus.publish(countMessage);
-    //     // それぞれ実行すると重複なしでイベントが発火するはず
-    //     expect(logs).toEqual([greetMessage, countMessage]);
-    // });
-    // 上記コメントアウトも解除すると配列に重複があるため型エラーになる
     it("重複したトピックを渡すと型エラーになる", () => {
         const eventbus = new EventBus<TopicMap>();
         // @ts-expect-error 同じトピックは重複して渡せない
@@ -435,31 +411,6 @@ describe("EventBus", () => {
 
     // it("例外が発生しても問題なく実行される", () => {
     it("publishしたときに例外が外に漏れず、onErrorに届く", () => {
-
-        // const eventbus = new EventBus<TopicMap>();
-        // const firstTopics = ["greet", "count"] as const;
-        // // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        // const thrower = (messages: Messages<TopicMap, typeof firstTopics>) => {
-        //     throw new Error();
-        // };
-        // eventbus.whenAll(firstTopics, thrower);
-        // const mock = vi.fn();
-        // eventbus.whenAll(firstTopics, mock);
-        // // 例外が投げられた時に問題なく処理が実行されるか確認する
-        // const greetMessage: Message<TopicMap, "greet"> = {
-        //     topic: "greet",
-        //     payload: { name: "oldTest" }
-        // }
-        // eventbus.publish(greetMessage);
-        // const countMessage: Message<TopicMap, "count"> = {
-        //     topic: "count",
-        //     payload: { n: 0 },
-        // }
-        // eventbus.publish(countMessage);
-
-        // // whenAll自体は例外を投げず、２つ目の処理が正しく動いていることを確認する
-        // expect(() => eventbus.whenAll(firstTopics, thrower)).not.toThrow();
-        // expect(mock).toHaveBeenCalledTimes(1);
 
         // 最初に登録した例外処理が正しく動くことを確認する
         const onError = vi.fn();
