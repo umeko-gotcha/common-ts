@@ -2,8 +2,11 @@ import type {
     Message,
     Listener,
     UnSubscriber,
-    OnError
-} from "./eventbus-type";
+    OnError,
+    Messages,
+    AllListener,
+    NoDuplicate
+} from "./eventbus-type.js";
 
 
 /** 
@@ -28,6 +31,36 @@ class EventBus<M extends object> {
      */
     constructor(onError?: OnError<M>) {
         this.#onError = onError ?? console.error;
+    }
+
+    /**
+     * 同期・非同期の両方で使う、例外を外に漏らさないエラー処理
+     * @param onError ハンドリングしたいエラーハンドラー
+     * @param message 発行されたメッセージ
+     * @param listener 実際にエラーを放出したリスナー
+     */
+    #assertError<K extends keyof M>(
+        onError: OnError<M>, message: Message<M, K>, listener: Listener<M, K>): void {
+
+        const errorHandler = (error: unknown) => {
+            try {
+                onError(message, listener, error);
+            } catch (err: unknown) {
+                console.error(
+                    `topic「${String(message.topic)}」のエラーハンドラで例外が発生しました。`,
+                    err,
+                );
+            }
+        }
+
+        try {
+            const result = listener(message);
+            if (result instanceof Promise) {
+                result.catch(error => errorHandler(error));
+            }
+        } catch (error: unknown) {
+            errorHandler(error);
+        }
     }
 
     /**
@@ -57,33 +90,66 @@ class EventBus<M extends object> {
         // subscribe内でのsubscribeやunsubscribeの影響を受けない
         const listeners = Array.from(this.#listenerMap.get(message.topic) ?? []);
 
-        // 同期・非同期の両方で使う、例外を外に漏らさないエラー処理
-        const handler = (listener: Listener<M, K>, error: unknown) => {
-            try {
-                errorHandler(message, listener, error);
-            } catch (err: unknown) {
-                console.error(
-                    `topic「${String(message.topic)}」のエラーハンドラで例外が発生しました。`,
-                    err,
-                );
-            }
-        };
-
         // #NOTE: listenerの引数の型であるMessage<M, K>のKをフィールドが持てないため、
         // AnyListener型で保持している。K自体は間違いなくmessage.topicの型であるため、
         // 型アサーションでListener<M, K>[]に変換している。
         // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
         for (const listener of listeners as Listener<M, K>[]) {
-            try {
-                const result = listener(message);
-                if (result instanceof Promise) {
-                    result.catch(err => handler(listener, err));
-                }
-            } catch (error: unknown) {
-                handler(listener, error);
-            }
+            this.#assertError(errorHandler, message, listener);
         }
     }
+
+    /**
+     * #NOTE: 実装はAI生成で既存の実装と方針を提示し修正案を出力\
+     * 関連する全てのイベントが実行されたことを確認してから実行するlisetnerを定義する。
+     * 
+     * @this Subscriber
+     * @param topics 
+     * @param listener 
+     * @returns 実行後に関連するトピックの購読を解除する関数
+     */
+    whenAll<const T extends readonly (keyof M)[]>(
+        topics: T & NoDuplicate<T>,
+        listener: AllListener<M, T>,
+    ): UnSubscriber {
+
+        // トピックに対応したメッセージを管理するためのMap
+        const latest = new Map<keyof M, Message<M, keyof M>>();
+        // listenerに紐づくトピック全体を保持するためのSet
+        const arrived = new Set<keyof M>();
+
+        // トピックの重複を排除する
+        const topicArray = Array.from(new Set(topics));
+
+        const unsubscribers = topicArray.map((topic) =>
+
+            // トピックごとにlistenerを登録していく
+            this.subscribe(topic, (message) => {
+
+                // それぞれのlistenerがお互いのtopicの状況を監視する
+                latest.set(topic, message);
+                arrived.add(topic);
+                // まだ全部そろっていなければ待つ
+                if (arrived.size < topicArray.length) {
+                    return;
+                }
+                // そろったらリセットしてから呼ぶ
+                arrived.clear();
+                // #NOTE: topicsの順にlatestから取り出すので、各要素は対応するトピックのMessage
+                // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+                const messages = topicArray.map((t) => latest.get(t)) as Messages<M, T>;
+                return listener(messages);
+            }),
+        );
+
+        return () => {
+            for (const unsubscribe of unsubscribers) {
+                unsubscribe();
+            }
+        };
+    }
 }
+
+
 
 export { EventBus };
