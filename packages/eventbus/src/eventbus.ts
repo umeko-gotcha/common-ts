@@ -131,14 +131,14 @@ class EventBus<M extends object> {
                 latest.set(topic, message);
                 arrived.add(topic);
                 // まだ全部そろっていなければ待つ
-                if (arrived.size < new Set(topics).size) {
+                if (arrived.size < topicArray.length) {
                     return;
                 }
                 // そろったらリセットしてから呼ぶ
                 arrived.clear();
                 // #NOTE: topicsの順にlatestから取り出すので、各要素は対応するトピックのMessage
                 // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
-                const messages = topics.map((t) => latest.get(t)) as Messages<M, T>;
+                const messages = topicArray.map((t) => latest.get(t)) as Messages<M, T>;
                 return listener(messages);
             }),
         );
