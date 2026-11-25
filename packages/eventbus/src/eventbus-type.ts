@@ -48,13 +48,13 @@ type OnError<M extends object> = <K extends keyof M>(
     error: unknown
 ) => void;
 
-/** AI実装：タプルに同じ要素が2回以上あれば true */
+/** タプルに同じ要素が2回以上あれば true */
 type HasDuplicate<T extends readonly unknown[]> =
     T extends readonly [infer Head, ...infer Rest]
         ? Head extends Rest[number] ? true : HasDuplicate<Rest>
         : false;
 
-/** AI実装：重複があれば、エラーメッセージの文字列型にする */
+/** 重複があれば、エラーメッセージの文字列型にする */
 type NoDuplicate<T extends readonly unknown[]> =
     HasDuplicate<T> extends true ? "topicsに同じトピックが重複しています" : unknown;
 
