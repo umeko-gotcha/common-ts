@@ -37,5 +37,7 @@ jobs:
       # 手元と同じ手順を、速く終わるものから順に
       - run: npm ci
       - run: npm run lint
+      # 型チェックを行う
+      - run: npm run typecheck
       - run: npm test
       - run: npm run build

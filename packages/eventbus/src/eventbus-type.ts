@@ -21,11 +21,20 @@ type Listener<M extends object, T extends keyof M> = (
     message: Message<M, T>,
 ) => void | Promise<void>;
 
+
+/** トピックの配列から、同じ順番のメッセージのタプルを作る */
+type Messages<M extends object, T extends readonly (keyof M)[]> = {
+    [I in keyof T]: T[I] extends keyof M ? Message<M, T[I]> : never;
+};
+
+/** 全部そろったときに呼ばれる関数。メッセージのタプルを受け取る */
+type AllListener<M extends object, T extends readonly (keyof M)[]> =
+    (messages: Messages<M, T>) => void | Promise<void>;
+
 /** 
  * 実行後にイベントハンドラーを購読解除するための関数 
- * @returns イベントハンドラーが削除できたかどうか
  */
-type UnSubscriber = () => boolean;
+type UnSubscriber = () => void;
 
 /**
  * イベントの発行側がイベント発行時に発生するエラーに対して処理するためのエラーハンドラー
@@ -38,6 +47,16 @@ type OnError<M extends object> = <K extends keyof M>(
     listener: Listener<M, K>,
     error: unknown
 ) => void;
+
+/** タプルに同じ要素が2回以上あれば true */
+type HasDuplicate<T extends readonly unknown[]> =
+    T extends readonly [infer Head, ...infer Rest]
+        ? Head extends Rest[number] ? true : HasDuplicate<Rest>
+        : false;
+
+/** 重複があれば、エラーメッセージの文字列型にする */
+type NoDuplicate<T extends readonly unknown[]> =
+    HasDuplicate<T> extends true ? "topicsに同じトピックが重複しています" : unknown;
 
 /**
  * EventBusに対して発行のみを許可するためのインターフェース
@@ -64,6 +83,12 @@ interface Publisher<M extends object> {
 interface Subscriber<M extends object> {
     /** トピックに対するリスナーを購読する */
     subscribe<T extends keyof M>(topic: T, listener: Listener<M, T>): UnSubscriber;
+
+    /** 複数のトピックに対するリスナーを購読する */
+    whenAll<const T extends readonly (keyof M)[]>(
+        topics: T & NoDuplicate<T>,
+        listener: AllListener<M, T>,
+    ): UnSubscriber
 }
 
 export type {
@@ -73,4 +98,7 @@ export type {
     OnError,
     Publisher,
     Subscriber,
+    Messages,
+    AllListener,
+    NoDuplicate
 };
