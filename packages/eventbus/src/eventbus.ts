@@ -100,7 +100,6 @@ class EventBus<M extends object> {
     }
 
     /**
-     * #NOTE: 実装はAI生成で既存の実装と方針を提示し修正案を出力\
      * 関連する全てのイベントが実行されたことを確認してから実行するlisetnerを定義する。
      * 
      * @this Subscriber

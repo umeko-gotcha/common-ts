@@ -1,25 +1,43 @@
 {
   "name": "@u-gotcha/eventbus",
-  "version": "0.1.0",
-  "description": "Type-safe event bus",
+  "version": "0.2.0",
+  "description": "Type-safe event bus for TypeScript with compile-time checked topics and payloads, safe error handling and multi-topic listeners",
+  "keywords": [
+    "eventbus",
+    "event-bus",
+    "events",
+    "pubsub",
+    "publish-subscribe",
+    "emitter",
+    "typescript",
+    "type-safe"
+  ],
   "license": "MIT",
+  "author": "umeko_gotcha",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/umeko-gotcha/common-ts.git",
     "directory": "packages/eventbus"
   },
-  "publishConfig": { "access": "public" },
+  "homepage": "https://github.com/umeko-gotcha/common-ts/tree/main/packages/eventbus#readme",
+  "bugs": {
+    "url": "https://github.com/umeko-gotcha/common-ts/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "vite build && tsc -p tsconfig.json",
     "prepublishOnly": "npm run build"
-  },
-  "keywords": [],
-  "type": "module"
+  }
 }

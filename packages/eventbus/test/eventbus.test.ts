@@ -352,7 +352,7 @@ describe("EventBus", () => {
         eventbus.publish(greetMessage);
         expect(mock).toHaveBeenCalledOnce();
 
-        // AI：count → greet の順に publish しても、受け取るのは topics の順
+        // count → greet の順に publish しても、受け取るのは topics の順
         expect(mock).toHaveBeenCalledWith([greetMessage, countMessage]);
     });
 

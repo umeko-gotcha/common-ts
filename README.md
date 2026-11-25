@@ -18,6 +18,8 @@
  - eventbusのインスタンスが持つ型パラメータに含まれるプロパティをトピックとしたsubscribe実装
  - eventbusのインスタンスが持つ型パラメータのバリューを引数に受け取るpublisher実装
  - eventbusの最中は例外が発生しても止まらないようにする実装
+ - 複数のトピックが終わってから反応するlistenerを定義するwhenAllの実装<br>
+  （javaのcycle barrier と類似の内容）
 
 未実装で実装予定のもの
  - publishしたMessageを保持するEventStoreの実装
