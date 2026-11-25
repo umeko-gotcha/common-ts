@@ -7,7 +7,8 @@
     "test": "vitest run",
     "evenbbus_test": "vitest run packages/eventbus",
     "reactive_test": "vitest run packages/reactive",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.test.json"
   },
   "repository": {
     "type": "git",
